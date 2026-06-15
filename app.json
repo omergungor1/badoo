@@ -1,17 +1,18 @@
 {
   "expo": {
-    "name": "beden-gunlugu",
-    "slug": "beden-gunlugu",
+    "name": "Badoo",
+    "slug": "badoo",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
+    "scheme": "badoo",
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": true
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#FFF1E5",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
@@ -19,6 +20,21 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#FFF9F3",
+          "image": "./assets/icon.png",
+          "imageWidth": 160
+        }
+      ],
+      "expo-font",
+      "expo-secure-store",
+      "expo-sqlite",
+      "@react-native-community/datetimepicker"
+    ]
   }
 }
