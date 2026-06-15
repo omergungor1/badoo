@@ -6,6 +6,7 @@ import {
   Text,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import {
   CONDITIONS,
@@ -157,7 +158,8 @@ export default function OnboardingScreen() {
   }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <SafeAreaView style={styles.safe} edges={['top']}>
+      <ScrollView contentContainerStyle={styles.content}>
       <Text style={styles.progress}>
         Adım {step + 1}/{STEPS.length}
       </Text>
@@ -257,12 +259,13 @@ export default function OnboardingScreen() {
           style={step > 0 ? styles.half : undefined}
         />
       </View>
-    </ScrollView>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background },
+  safe: { flex: 1, backgroundColor: colors.background },
   content: { padding: spacing.lg, gap: spacing.md, paddingBottom: spacing.xxl },
   progress: { ...typography.caption, color: colors.textSecondary },
   title: { ...typography.h1, color: colors.textPrimary },

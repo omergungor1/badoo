@@ -2,13 +2,18 @@
   "expo": {
     "name": "Badoo",
     "slug": "badoo",
+    "owner": "omerexpo",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "scheme": "badoo",
     "userInterfaceStyle": "light",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.omerexpo.badoo",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -35,6 +40,12 @@
       "expo-secure-store",
       "expo-sqlite",
       "@react-native-community/datetimepicker"
-    ]
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "2a46f6d3-4365-48f3-ab72-f23dae89c3f4"
+      }
+    }
   }
 }

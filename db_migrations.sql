@@ -1,4 +1,4 @@
--- Beden Günlüğü - Supabase migration
+-- badoo - Supabase migration
 -- Bu dosyayı Supabase SQL Editor'de çalıştırın.
 
 -- 1) Schema API'ye açık olmalı:

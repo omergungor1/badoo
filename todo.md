@@ -1,8 +1,8 @@
-# BEDEN GÜNLÜĞÜ – ÜRÜN TASARIM DOKÜMANI
+# Badoo – ÜRÜN TASARIM DOKÜMANI
 
 Sen deneyimli bir Product Manager, UX Designer ve Senior Full Stack Developer'sın.
 
-Bana "Beden Günlüğü" isimli mobil uygulamayı tasarlamanı ve geliştirmeni istiyorum.
+Bana "Badoo" isimli mobil uygulamayı tasarlamanı ve geliştirmeni istiyorum.
 
 Bu uygulama bir kalori sayma uygulaması değildir.
 
@@ -526,7 +526,7 @@ Sebebi:
 * Yemek uygulamalarında iştah açıcı etki yaratıyor.
 * Kullanıcının her gün veri girmesini teşvik eden "pozitif" bir his veriyor.
 
-**Beden Günlüğü** için hedefimiz:
+**Badoo** için hedefimiz:
 
 > Hastane uygulaması değil, "vücudunu keşfetme oyunu" hissi.
 
@@ -894,7 +894,7 @@ Vermesi gereken his:
 
 > "Kendimi daha iyi tanıyorum."
 
-Bu yüzden turuncu + krem zemin + tombul başlık fontları + büyük kartlar kombinasyonu, Beden Günlüğü'nün konseptine en uygun tek renk paleti ve tasarım yönü olacaktır.
+Bu yüzden turuncu + krem zemin + tombul başlık fontları + büyük kartlar kombinasyonu, Badoo'nün konseptine en uygun tek renk paleti ve tasarım yönü olacaktır.
 
 
 Bu özellik bence uygulamanın en güçlü ekranlarından biri olabilir. Çünkü kullanıcılar tablo okumaktan çok **desen görmeyi** sever.
