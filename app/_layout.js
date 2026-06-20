@@ -11,6 +11,7 @@ import {
 } from '@expo-google-fonts/nunito-sans';
 import SplashView from '../components/ui/SplashView';
 import { AuthProvider, useAuth } from '../context/AuthContext';
+import { usePushNotifications } from '../hooks/usePushNotifications';
 import { colors } from '../theme';
 
 export { ErrorBoundary } from 'expo-router';
@@ -46,7 +47,10 @@ function useProtectedRoute() {
 }
 
 function RootLayoutNav() {
+  const { user } = useAuth();
+
   useProtectedRoute();
+  usePushNotifications(user?.id);
 
   return (
     <Stack

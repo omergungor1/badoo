@@ -33,7 +33,7 @@ export default function TabsLayout() {
             },
           }}
         />
-        <Tabs.Screen name="stats" options={{ title: 'İstatistik' }} />
+        <Tabs.Screen name="sensitivity" options={{ title: 'Besin Hassasiyeti' }} />
         <Tabs.Screen name="profile" options={{ title: 'Profil' }} />
       </Tabs>
 

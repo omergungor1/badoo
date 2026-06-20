@@ -4,6 +4,10 @@
 create table badoo.profiles (
   id uuid primary key default uuid_generate_v4(),
   user_id uuid,
+  nickname text,
+  bio text,
+  profile_image_url text,
+  profile_image_thumb_url text,
   birth_year integer,
   gender text,
   height integer,
@@ -11,6 +15,8 @@ create table badoo.profiles (
   daily_calorie_goal integer,
   daily_protein_goal integer,
   daily_water_goal integer,
+  daily_activity_goal integer default 10000,
+  daily_activity_goal_type text default 'steps',
   onboarding_completed boolean DEFAULT false,
   created_at timestamptz DEFAULT now(),
   updated_at timestamptz DEFAULT now()
@@ -115,7 +121,9 @@ create table badoo.activity_logs (
   user_id uuid,
   activity_name text,
   duration integer,
-  distance integer,
+  distance numeric,
+  steps integer,
+  source text not null default 'manual',
   timestamp timestamptz
 );
 
@@ -160,6 +168,17 @@ create table badoo.goals (
   created_at timestamptz default now()
 );
 
+create table badoo.common_sensitivity_foods (
+  id uuid primary key default uuid_generate_v4(),
+  food_key text unique not null,
+  food_name text not null,
+  emoji text,
+  keywords text[] not null default '{}',
+  sort_order integer default 0,
+  is_active boolean default true,
+  created_at timestamptz default now()
+);
+
 create table badoo.period_symptom_options (
   id uuid primary key default uuid_generate_v4(),
   symptom_key text unique not null,
@@ -190,8 +209,19 @@ create table badoo.period_logs (
   logged_at timestamptz default now()
 );
 
+create table badoo.device_push_tokens (
+  id uuid primary key default uuid_generate_v4(),
+  user_id uuid not null,
+  fcm_token text not null,
+  platform text not null default 'ios',
+  created_at timestamptz default now(),
+  updated_at timestamptz default now(),
+  unique (user_id, fcm_token)
+);
+
 -- MVP Data API yetkileri (db_migrations.sql bölüm 11 ile de uygulanır)
 -- GRANT USAGE ON SCHEMA badoo TO anon, authenticated, service_role;
+-- GRANT SELECT ON badoo.common_sensitivity_foods TO anon, authenticated, service_role;
 -- GRANT SELECT, INSERT, UPDATE, DELETE ON badoo.goal_options TO anon, authenticated, service_role;
 -- GRANT SELECT, INSERT, UPDATE, DELETE ON badoo.period_symptom_options TO anon, authenticated, service_role;
 -- GRANT SELECT, INSERT, UPDATE, DELETE ON badoo.period_cycles TO anon, authenticated, service_role;

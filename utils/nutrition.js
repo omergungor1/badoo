@@ -76,6 +76,7 @@ export function calculateDailyTargets({ birthYear, gender, height, weight, goals
     calories,
     protein,
     water,
+    activity: 10000,
     bmi: calculateBMI(weight, height),
   };
 }

@@ -3,6 +3,31 @@ const appJson = require('./app.json');
 module.exports = () => ({
   expo: {
     ...appJson.expo,
+    ios: {
+      ...appJson.expo.ios,
+      googleServicesFile: './GoogleService-Info.plist',
+      entitlements: {
+        'aps-environment': process.env.EAS_BUILD_PROFILE === 'production' ? 'production' : 'development',
+      },
+      infoPlist: {
+        ...appJson.expo.ios?.infoPlist,
+        UIBackgroundModes: ['remote-notification'],
+      },
+    },
+    plugins: [
+      ...(appJson.expo.plugins || []),
+      '@react-native-firebase/app',
+      '@react-native-firebase/messaging',
+      [
+        'expo-build-properties',
+        {
+          ios: {
+            useFrameworks: 'static',
+            forceStaticLinking: ['RNFBApp', 'RNFBMessaging'],
+          },
+        },
+      ],
+    ],
     extra: {
       ...appJson.expo.extra,
       supabaseUrl: process.env.EXPO_PUBLIC_SUPABASE_URL,

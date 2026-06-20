@@ -20,7 +20,7 @@ import {
   startOfDay,
   toISODate,
 } from '../../utils/date';
-import { formatSleepLogLabel } from '../../utils/duration';
+import { formatActivityValue } from '../../utils/activity';
 import { formatQuantityLabel } from '../../utils/foodQuantity';
 import { buildPeriodCalendarMarkers } from '../../utils/period';
 import { colors, spacing, typography } from '../../theme';
@@ -60,8 +60,20 @@ function getTimelineLabel(item) {
       return `🚽 ${item.consistency}`;
     case 'sleep':
       return `😴 ${formatSleepLogLabel(item)} (Kalite ${item.quality}/5)`;
-    case 'activity':
-      return `🚶 ${item.activity_name} — ${item.duration} dk`;
+    case 'activity': {
+      if (item.source === 'apple_health') {
+        const parts = [];
+        if (item.steps) parts.push(`${item.steps.toLocaleString('tr-TR')} adım`);
+        if (item.distance) parts.push(formatActivityValue(item.distance, 'distance_km'));
+        return `🍎 Apple Sağlık — ${parts.join(' · ') || 'Veri yok'}`;
+      }
+
+      const parts = [`🚶 ${item.activity_name}`];
+      if (item.steps) parts.push(`${item.steps.toLocaleString('tr-TR')} adım`);
+      if (item.distance) parts.push(formatActivityValue(item.distance, 'distance_km'));
+      if (item.duration) parts.push(`${item.duration} dk`);
+      return parts.join(' — ');
+    }
     case 'status':
       return `☀️ Enerji ${item.energy}/5 · Ruh hali ${item.mood}/5`;
     case 'note':

@@ -77,6 +77,38 @@ export async function createFood(foodName, unitType = 'gram') {
   return { data, error };
 }
 
+export async function updateFood(foodId, { foodName, unitType, calories, protein, carbohydrates, fats }) {
+  const trimmed = foodName.trim();
+  if (!trimmed) {
+    return { data: null, error: { message: 'Yemek veya içecek adı girin.' } };
+  }
+
+  const { data: existing, error: findError } = await findFoodByName(trimmed);
+  if (findError) {
+    return { data: null, error: findError };
+  }
+
+  if (existing && existing.id !== foodId) {
+    return { data: null, error: { message: 'Bu yemek veya içecek adı zaten kullanılıyor.' } };
+  }
+
+  const { data, error } = await getDb()
+    .from('foods')
+    .update({
+      food_name: trimmed,
+      unit_type: unitType,
+      calories,
+      protein,
+      carbohydrates,
+      fats,
+    })
+    .eq('id', foodId)
+    .select()
+    .single();
+
+  return { data, error };
+}
+
 export async function addFoodLog({ userId, foodId, quantity, timestamp }) {
   const { data, error } = await getDb()
     .from('food_logs')

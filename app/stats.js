@@ -2,12 +2,14 @@ import { useCallback, useMemo, useState } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useAuth } from '../../context/AuthContext';
-import { calculateFoodTotals } from '../../services/foodService';
-import { getWeeklyStats } from '../../services/logService';
-import Card from '../../components/ui/Card';
-import SectionTitle from '../../components/ui/SectionTitle';
-import { colors, spacing, typography } from '../../theme';
+import BackButton from '../components/ui/BackButton';
+import Card from '../components/ui/Card';
+import SectionTitle from '../components/ui/SectionTitle';
+import { useAuth } from '../context/AuthContext';
+import { calculateFoodTotals } from '../services/foodService';
+import { getWeeklyStats } from '../services/logService';
+import { calculateDailyActivityTotals, formatActivityValue } from '../utils/activity';
+import { colors, spacing, typography } from '../theme';
 
 export default function StatsScreen() {
   const { user } = useAuth();
@@ -36,7 +38,9 @@ export default function StatsScreen() {
 
     const foodTotals = calculateFoodTotals(stats.foodLogs);
     const waterTotal = stats.waterLogs.reduce((sum, log) => sum + (log.amount || 0), 0);
-    const activityMinutes = stats.activityLogs.reduce((sum, log) => sum + (log.duration || 0), 0);
+    const activityTotals = calculateDailyActivityTotals(stats.activityLogs);
+    const activitySteps = Math.round(activityTotals.steps / 7);
+    const activityDistance = Number((activityTotals.distanceKm / 7).toFixed(1));
     const sleepAvg = stats.sleepLogs.length
       ? (stats.sleepLogs.reduce((sum, log) => sum + (log.hours || 0), 0) / stats.sleepLogs.length).toFixed(1)
       : 0;
@@ -53,7 +57,8 @@ export default function StatsScreen() {
         ? Math.round(calculateFoodTotals(stats.foodLogs).protein / 7)
         : 0,
       water: Math.round(waterTotal / 7),
-      activityMinutes,
+      activitySteps,
+      activityDistance,
       sleepAvg,
       symptomCounts,
     };
@@ -67,11 +72,16 @@ export default function StatsScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
+      <View style={styles.header}>
+        <BackButton />
+        <Text style={styles.headerTitle}>İstatistikler</Text>
+      </View>
+
       <ScrollView
         contentContainerStyle={styles.content}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
       >
-        <SectionTitle title="İstatistikler" subtitle="Son 7 gün özeti" />
+        <SectionTitle title="Son 7 gün özeti" subtitle="Kalori, su, aktivite ve belirti dağılımı" />
 
         <View style={styles.grid}>
           <Card style={styles.statCard}>
@@ -87,8 +97,12 @@ export default function StatsScreen() {
             <Text style={styles.statValue}>{summary?.water || 0} ml</Text>
           </Card>
           <Card style={styles.statCard}>
-            <Text style={styles.statLabel}>Aktivite Süresi</Text>
-            <Text style={styles.statValue}>{summary?.activityMinutes || 0} dk</Text>
+            <Text style={styles.statLabel}>Ort. Adım/gün</Text>
+            <Text style={styles.statValue}>{summary?.activitySteps || 0}</Text>
+          </Card>
+          <Card style={styles.statCard}>
+            <Text style={styles.statLabel}>Ort. Yürüyüş/gün</Text>
+            <Text style={styles.statValue}>{formatActivityValue(summary?.activityDistance || 0, 'distance_km')}</Text>
           </Card>
           <Card style={styles.statCard}>
             <Text style={styles.statLabel}>Uyku Ort.</Text>
@@ -115,6 +129,15 @@ export default function StatsScreen() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.md,
+  },
+  headerTitle: { ...typography.headingMedium, color: colors.textPrimary, flex: 1 },
   content: { padding: spacing.lg, gap: spacing.md, paddingBottom: spacing.xxl },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   statCard: { width: '47%', gap: 6 },

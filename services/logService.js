@@ -89,7 +89,15 @@ export async function addSleepLog({ userId, hours, quality, wakeCount, durationM
     .single();
 }
 
-export async function addActivityLog({ userId, activityName, duration, distance, timestamp }) {
+export async function addActivityLog({
+  userId,
+  activityName,
+  duration,
+  distance,
+  steps,
+  source = 'manual',
+  timestamp,
+}) {
   return getDb()
     .from('activity_logs')
     .insert({
@@ -97,7 +105,54 @@ export async function addActivityLog({ userId, activityName, duration, distance,
       activity_name: activityName,
       duration,
       distance,
+      steps,
+      source,
       timestamp: timestamp || new Date().toISOString(),
+    })
+    .select()
+    .single();
+}
+
+export async function upsertAppleHealthActivity({ userId, logDate, steps, distanceKm }) {
+  const start = `${logDate}T00:00:00.000Z`;
+  const end = `${logDate}T23:59:59.999Z`;
+
+  const { data: existing, error: fetchError } = await getDb()
+    .from('activity_logs')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('source', 'apple_health')
+    .gte('timestamp', start)
+    .lte('timestamp', end)
+    .maybeSingle();
+
+  if (fetchError) {
+    return { data: null, error: fetchError };
+  }
+
+  const payload = {
+    activity_name: 'Apple Sağlık',
+    duration: 0,
+    steps: steps || 0,
+    distance: distanceKm || 0,
+    source: 'apple_health',
+    timestamp: `${logDate}T12:00:00.000Z`,
+  };
+
+  if (existing?.id) {
+    return getDb()
+      .from('activity_logs')
+      .update(payload)
+      .eq('id', existing.id)
+      .select()
+      .single();
+  }
+
+  return getDb()
+    .from('activity_logs')
+    .insert({
+      user_id: userId,
+      ...payload,
     })
     .select()
     .single();
@@ -152,6 +207,20 @@ export async function ensureDailyTasks(userId) {
   }));
 
   const { data, error } = await getDb().from('daily_tasks').insert(rows).select();
+  return { data, error };
+}
+
+export async function getAllDailyTasksForToday(userId) {
+  const today = toISODate();
+  await ensureDailyTasks(userId);
+
+  const { data, error } = await getDb()
+    .from('daily_tasks')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('task_date', today)
+    .order('created_at', { ascending: true });
+
   return { data, error };
 }
 
@@ -222,13 +291,14 @@ export async function getLogsForDate(userId, date) {
   const start = `${date}T00:00:00.000Z`;
   const end = `${date}T23:59:59.999Z`;
 
-  const [symptoms, sleep, status, stool, foodLogs, waterLogs] = await Promise.all([
+  const [symptoms, sleep, status, stool, foodLogs, waterLogs, activityLogs] = await Promise.all([
     getDb().from('symptom_logs').select('*').eq('user_id', userId).gte('timestamp', start).lte('timestamp', end),
     getDb().from('sleep_logs').select('*').eq('user_id', userId).gte('timestamp', start).lte('timestamp', end),
     getDb().from('daily_status_logs').select('*').eq('user_id', userId).gte('timestamp', start).lte('timestamp', end),
     getDb().from('stool_logs').select('*').eq('user_id', userId).gte('time', start).lte('time', end),
     getDb().from('food_logs').select('*, foods(food_name, unit_type, protein)').eq('user_id', userId).gte('timestamp', start).lte('timestamp', end),
     getDb().from('water_logs').select('*').eq('user_id', userId).gte('timestamp', start).lte('timestamp', end),
+    getDb().from('activity_logs').select('*').eq('user_id', userId).gte('timestamp', start).lte('timestamp', end),
   ]);
 
   return {
@@ -238,6 +308,7 @@ export async function getLogsForDate(userId, date) {
     stoolLogs: stool.data || [],
     foodLogs: foodLogs.data || [],
     waterLogs: waterLogs.data || [],
+    activityLogs: activityLogs.data || [],
   };
 }
 

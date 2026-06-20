@@ -6,7 +6,7 @@ const TABS = [
   { key: 'index', label: 'Ana Sayfa', icon: '🏠' },
   { key: 'daily', label: 'Günlük', icon: '📖' },
   { key: 'add', label: '', icon: '+' },
-  { key: 'stats', label: 'İstatistik', icon: '📊' },
+  { key: 'sensitivity', label: 'Hassasiyet', icon: '⚠️' },
   { key: 'profile', label: 'Profil', icon: '👤' },
 ];
 

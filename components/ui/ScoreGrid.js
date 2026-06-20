@@ -1,8 +1,11 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { getScoreColor, getScoreEmoji } from '../../utils/digestionScore';
+import { getFourWeekGridRows } from '../../utils/date';
 import { colors, radius, spacing, typography } from '../../theme';
 
-export default function ScoreGrid({ scores = [], onDayPress, compact = false }) {
+const WEEKDAY_LABELS = ['Pt', 'Sa', 'Ça', 'Pe', 'Cu', 'Ct', 'Pz'];
+
+function LinearScoreGrid({ scores, onDayPress, compact }) {
   const cellSize = compact ? 14 : 18;
   const gap = compact ? 4 : 6;
 
@@ -30,6 +33,59 @@ export default function ScoreGrid({ scores = [], onDayPress, compact = false }) 
   );
 }
 
+function WeeklyScoreGrid({ scores, onDayPress, compact }) {
+  const scoreMap = Object.fromEntries(scores.map((item) => [item.date, item.score]));
+  const rows = getFourWeekGridRows();
+  const cellGap = compact ? 4 : 6;
+
+  return (
+    <View style={styles.weeklyWrap}>
+      <View style={[styles.weekdayRow, { gap: cellGap }]}>
+        {WEEKDAY_LABELS.map((label) => (
+          <Text key={label} style={[styles.weekdayLabel, compact && styles.weekdayLabelCompact]}>
+            {label}
+          </Text>
+        ))}
+      </View>
+
+      <View style={styles.weekRows}>
+        {rows.map((week) => (
+          <View key={week[0].date} style={[styles.weekRow, { gap: cellGap }]}>
+            {week.map((cell) => {
+              const score = scoreMap[cell.date];
+              const hasScore = cell.inRange && score != null;
+
+              return (
+                <Pressable
+                  key={cell.date}
+                  onPress={() => cell.inRange && onDayPress?.({ date: cell.date, score: score ?? null })}
+                  disabled={!cell.inRange}
+                  style={[
+                    styles.weeklyCell,
+                    compact && styles.weeklyCellCompact,
+                    !cell.inRange && styles.weeklyCellOutOfRange,
+                    cell.inRange && score == null && styles.weeklyCellEmpty,
+                    hasScore && { backgroundColor: getScoreColor(score) },
+                    cell.isToday && styles.weeklyCellToday,
+                  ]}
+                />
+              );
+            })}
+          </View>
+        ))}
+      </View>
+    </View>
+  );
+}
+
+export default function ScoreGrid({ scores = [], onDayPress, compact = false, layout = 'linear' }) {
+  if (layout === 'weekly') {
+    return <WeeklyScoreGrid scores={scores} onDayPress={onDayPress} compact={compact} />;
+  }
+
+  return <LinearScoreGrid scores={scores} onDayPress={onDayPress} compact={compact} />;
+}
+
 const styles = StyleSheet.create({
   grid: {
     flexDirection: 'row',
@@ -42,6 +98,50 @@ const styles = StyleSheet.create({
   },
   emoji: {
     fontSize: 8,
+  },
+  weeklyWrap: {
+    gap: spacing.xs,
+  },
+  weekdayRow: {
+    flexDirection: 'row',
+  },
+  weekdayLabel: {
+    flex: 1,
+    textAlign: 'center',
+    ...typography.caption,
+    color: colors.textSecondary,
+    fontFamily: typography.bodySemiBold?.fontFamily || typography.body.fontFamily,
+  },
+  weekdayLabelCompact: {
+    fontSize: 10,
+  },
+  weekRows: {
+    gap: 4,
+  },
+  weekRow: {
+    flexDirection: 'row',
+  },
+  weeklyCell: {
+    flex: 1,
+    aspectRatio: 1,
+    borderRadius: radius.sm,
+    backgroundColor: colors.border,
+  },
+  weeklyCellCompact: {
+    borderRadius: radius.sm / 2,
+  },
+  weeklyCellOutOfRange: {
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: colors.border,
+    opacity: 0.35,
+  },
+  weeklyCellEmpty: {
+    backgroundColor: colors.border,
+  },
+  weeklyCellToday: {
+    borderWidth: 2,
+    borderColor: colors.textPrimary,
   },
 });
 

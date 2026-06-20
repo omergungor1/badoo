@@ -9,6 +9,7 @@ import {
   getConditions,
   updateCondition,
 } from '../services/profileService';
+import BackButton from '../components/ui/BackButton';
 import Button from '../components/ui/Button';
 import Card from '../components/ui/Card';
 import Input from '../components/ui/Input';
@@ -178,9 +179,7 @@ export default function ConditionsScreen() {
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <View style={styles.header}>
-        <Pressable onPress={() => router.back()} hitSlop={8}>
-          <Text style={styles.back}>← Geri</Text>
-        </Pressable>
+        <BackButton />
         <Text style={styles.headerTitle}>Hastalık Yönetimi</Text>
       </View>
 
@@ -223,13 +222,14 @@ export default function ConditionsScreen() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
   header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.sm,
     paddingBottom: spacing.md,
-    gap: spacing.sm,
   },
-  back: { ...typography.body, color: colors.primary },
-  headerTitle: { ...typography.headingMedium, color: colors.textPrimary },
+  headerTitle: { ...typography.headingMedium, color: colors.textPrimary, flex: 1 },
   content: { padding: spacing.lg, gap: spacing.md, paddingBottom: spacing.xxl },
   addBtn: { marginTop: spacing.sm },
   rowCard: { gap: spacing.sm },

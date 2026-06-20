@@ -296,11 +296,13 @@ ALTER TABLE badoo.goal_options DISABLE ROW LEVEL SECURITY;
 ALTER TABLE badoo.period_symptom_options DISABLE ROW LEVEL SECURITY;
 ALTER TABLE badoo.period_cycles DISABLE ROW LEVEL SECURITY;
 ALTER TABLE badoo.period_logs DISABLE ROW LEVEL SECURITY;
+ALTER TABLE badoo.common_sensitivity_foods DISABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "goal_options_read" ON badoo.goal_options;
 DROP POLICY IF EXISTS "period_symptom_options_read" ON badoo.period_symptom_options;
 DROP POLICY IF EXISTS "period_cycles_own" ON badoo.period_cycles;
 DROP POLICY IF EXISTS "period_logs_own" ON badoo.period_logs;
+DROP POLICY IF EXISTS "common_sensitivity_foods_read" ON badoo.common_sensitivity_foods;
 
 GRANT USAGE ON SCHEMA badoo TO anon, authenticated, service_role;
 
@@ -308,6 +310,7 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON badoo.goal_options TO anon, authenticate
 GRANT SELECT, INSERT, UPDATE, DELETE ON badoo.period_symptom_options TO anon, authenticated, service_role;
 GRANT SELECT, INSERT, UPDATE, DELETE ON badoo.period_cycles TO anon, authenticated, service_role;
 GRANT SELECT, INSERT, UPDATE, DELETE ON badoo.period_logs TO anon, authenticated, service_role;
+GRANT SELECT ON badoo.common_sensitivity_foods TO anon, authenticated, service_role;
 
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA badoo TO anon, authenticated, service_role;
 
@@ -316,3 +319,156 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA badoo
 
 ALTER DEFAULT PRIVILEGES IN SCHEMA badoo
   GRANT USAGE, SELECT ON SEQUENCES TO anon, authenticated, service_role;
+
+-- foods güncelleme (besin değerlerini manuel düzenleme)
+GRANT UPDATE ON badoo.foods TO authenticated;
+
+DROP POLICY IF EXISTS "foods_update" ON badoo.foods;
+CREATE POLICY "foods_update" ON badoo.foods
+  FOR UPDATE TO authenticated USING (true) WITH CHECK (true);
+
+-- profiles sosyal alanları (nickname, bio, profil fotoğrafı)
+ALTER TABLE badoo.profiles
+  ADD COLUMN IF NOT EXISTS nickname text,
+  ADD COLUMN IF NOT EXISTS bio text,
+  ADD COLUMN IF NOT EXISTS profile_image_url text,
+  ADD COLUMN IF NOT EXISTS profile_image_thumb_url text;
+
+-- public profil fotoğrafları bucket
+INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+VALUES (
+  'profile-images',
+  'profile-images',
+  true,
+  5242880,
+  ARRAY['image/jpeg', 'image/png', 'image/webp']
+)
+ON CONFLICT (id) DO UPDATE SET
+  public = EXCLUDED.public,
+  file_size_limit = EXCLUDED.file_size_limit,
+  allowed_mime_types = EXCLUDED.allowed_mime_types;
+
+DROP POLICY IF EXISTS "profile_images_public_read" ON storage.objects;
+CREATE POLICY "profile_images_public_read" ON storage.objects
+  FOR SELECT TO public
+  USING (bucket_id = 'profile-images');
+
+DROP POLICY IF EXISTS "profile_images_insert_own" ON storage.objects;
+CREATE POLICY "profile_images_insert_own" ON storage.objects
+  FOR INSERT TO authenticated
+  WITH CHECK (
+    bucket_id = 'profile-images'
+    AND (storage.foldername(name))[1] = auth.uid()::text
+  );
+
+DROP POLICY IF EXISTS "profile_images_update_own" ON storage.objects;
+CREATE POLICY "profile_images_update_own" ON storage.objects
+  FOR UPDATE TO authenticated
+  USING (
+    bucket_id = 'profile-images'
+    AND (storage.foldername(name))[1] = auth.uid()::text
+  )
+  WITH CHECK (
+    bucket_id = 'profile-images'
+    AND (storage.foldername(name))[1] = auth.uid()::text
+  );
+
+DROP POLICY IF EXISTS "profile_images_delete_own" ON storage.objects;
+CREATE POLICY "profile_images_delete_own" ON storage.objects
+  FOR DELETE TO authenticated
+  USING (
+    bucket_id = 'profile-images'
+    AND (storage.foldername(name))[1] = auth.uid()::text
+  );
+
+-- common_sensitivity_foods (Türkiye'de sık görülen besin hassasiyetleri)
+CREATE TABLE IF NOT EXISTS badoo.common_sensitivity_foods (
+  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  food_key text UNIQUE NOT NULL,
+  food_name text NOT NULL,
+  emoji text,
+  keywords text[] NOT NULL DEFAULT '{}',
+  sort_order integer DEFAULT 0,
+  is_active boolean DEFAULT true,
+  created_at timestamptz DEFAULT now()
+);
+
+ALTER TABLE badoo.common_sensitivity_foods DISABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "common_sensitivity_foods_read" ON badoo.common_sensitivity_foods;
+
+GRANT SELECT ON badoo.common_sensitivity_foods TO anon, authenticated, service_role;
+
+INSERT INTO badoo.common_sensitivity_foods (food_key, food_name, emoji, keywords, sort_order)
+SELECT * FROM (VALUES
+  ('milk', 'Süt & Laktoz', '🥛', ARRAY['süt','laktoz','ayran','yoğurt','peynir','kefir','kaymak'], 1),
+  ('gluten', 'Gluten & Buğday', '🌾', ARRAY['gluten','buğday','ekmek','makarna','börek','simit','un','bulgur'], 2),
+  ('egg', 'Yumurta', '🥚', ARRAY['yumurta','menemen','omlet'], 3),
+  ('nuts', 'Kuruyemiş', '🥜', ARRAY['fıstık','fındık','ceviz','badem','kuruyemiş'], 4),
+  ('legumes', 'Baklagiller', '🫘', ARRAY['mercimek','nohut','fasulye','bakla','bezelye','barbunya'], 5),
+  ('onion_garlic', 'Soğan & Sarımsak', '🧅', ARRAY['soğan','sarımsak'], 6),
+  ('tomato', 'Domates', '🍅', ARRAY['domates','salça'], 7),
+  ('coffee', 'Kahve', '☕', ARRAY['kahve','espresso','latte','cappuccino','türk kahvesi'], 8),
+  ('citrus', 'Narenciye', '🍊', ARRAY['portakal','limon','greyfurt','mandalina'], 9),
+  ('spicy', 'Acı Baharat', '🌶️', ARRAY['acı','isot','pul biber'], 10),
+  ('chocolate', 'Çikolata', '🍫', ARRAY['çikolata','kakao'], 11),
+  ('seafood', 'Deniz Ürünleri', '🦐', ARRAY['balık','karides','midye','hamsi','levrek','somon','deniz'], 12),
+  ('soy', 'Soya', '🫛', ARRAY['soya','tofu','edamame'], 13),
+  ('cabbage', 'Lahana & Brokoli', '🥦', ARRAY['lahana','brokoli','karnabahar','brüksel'], 14),
+  ('fried', 'Kızartma & Yağlı', '🍟', ARRAY['kızart','patates','tava'], 15)
+) AS v(food_key, food_name, emoji, keywords, sort_order)
+WHERE NOT EXISTS (
+  SELECT 1 FROM badoo.common_sensitivity_foods c WHERE c.food_key = v.food_key
+);
+
+-- günlük aktivite hedefi (adım veya km)
+ALTER TABLE badoo.profiles
+  ADD COLUMN IF NOT EXISTS daily_activity_goal integer DEFAULT 10000;
+
+ALTER TABLE badoo.profiles
+  ADD COLUMN IF NOT EXISTS daily_activity_goal_type text DEFAULT 'steps';
+
+UPDATE badoo.profiles
+SET daily_activity_goal = 10000,
+    daily_activity_goal_type = 'steps'
+WHERE daily_activity_goal IS NULL
+   OR daily_activity_goal <= 100;
+
+UPDATE badoo.profiles
+SET daily_activity_goal_type = 'steps'
+WHERE daily_activity_goal_type IS NULL;
+
+-- aktivite kaynakları (apple_health / manual)
+ALTER TABLE badoo.activity_logs
+  ADD COLUMN IF NOT EXISTS steps integer;
+
+ALTER TABLE badoo.activity_logs
+  ADD COLUMN IF NOT EXISTS source text DEFAULT 'manual';
+
+UPDATE badoo.activity_logs
+SET source = 'manual'
+WHERE source IS NULL;
+
+ALTER TABLE badoo.activity_logs
+  ALTER COLUMN distance TYPE numeric USING distance::numeric;
+
+-- FCM push tokenları (Firebase Cloud Messaging, Supabase auth ile eşleşir)
+CREATE TABLE IF NOT EXISTS badoo.device_push_tokens (
+  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id uuid NOT NULL,
+  fcm_token text NOT NULL,
+  platform text NOT NULL DEFAULT 'ios',
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now(),
+  UNIQUE (user_id, fcm_token)
+);
+
+ALTER TABLE badoo.device_push_tokens ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "device_push_tokens_own" ON badoo.device_push_tokens;
+CREATE POLICY "device_push_tokens_own" ON badoo.device_push_tokens
+  FOR ALL TO authenticated
+  USING (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);
+
+GRANT SELECT, INSERT, UPDATE, DELETE ON badoo.device_push_tokens TO authenticated;

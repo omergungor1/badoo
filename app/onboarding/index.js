@@ -29,6 +29,7 @@ import GoalPicker from '../../components/ui/GoalPicker';
 import Input from '../../components/ui/Input';
 import Card from '../../components/ui/Card';
 import { calculateDailyTargets, getWeightAdvice } from '../../utils/nutrition';
+import { formatActivityValue } from '../../utils/activity';
 import { goalNamesFromOptions, validateGoalSelection } from '../../utils/goals';
 import { colors, spacing, typography } from '../../theme';
 
@@ -101,6 +102,8 @@ export default function OnboardingScreen() {
       daily_calorie_goal: targets?.calories || null,
       daily_protein_goal: targets?.protein || null,
       daily_water_goal: targets?.water || null,
+      daily_activity_goal: targets?.activity || 10000,
+      daily_activity_goal_type: 'steps',
       onboarding_completed: true,
     };
 
@@ -196,6 +199,9 @@ export default function OnboardingScreen() {
               <Text style={styles.cardText}>Kalori: {targets.calories} kcal</Text>
               <Text style={styles.cardText}>Protein: {targets.protein} g</Text>
               <Text style={styles.cardText}>Su: {targets.water} ml</Text>
+              <Text style={styles.cardText}>
+                Aktivite: {formatActivityValue(targets.activity, 'steps')}
+              </Text>
             </Card>
           ) : null}
         </View>
@@ -243,6 +249,9 @@ export default function OnboardingScreen() {
               <Text style={styles.cardText}>Günlük kalori hedefi: {targets.calories} kcal</Text>
               <Text style={styles.cardText}>Günlük protein hedefi: {targets.protein} g</Text>
               <Text style={styles.cardText}>Günlük su hedefi: {targets.water} ml</Text>
+              <Text style={styles.cardText}>
+                Günlük aktivite hedefi: {formatActivityValue(targets.activity, 'steps')}
+              </Text>
             </>
           ) : null}
         </Card>

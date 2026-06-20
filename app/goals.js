@@ -1,14 +1,15 @@
 import { useCallback, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
 import { getGoalOptions, getGoals, saveGoals } from '../services/profileService';
+import BackButton from '../components/ui/BackButton';
 import Card from '../components/ui/Card';
 import FormActions from '../components/ui/FormActions';
 import GoalPicker from '../components/ui/GoalPicker';
 import SectionTitle from '../components/ui/SectionTitle';
-import { validateGoalSelection } from '../utils/goals';
+import { mapSavedGoalsToSelectedIds, validateGoalSelection } from '../utils/goals';
 import { colors, spacing, typography } from '../theme';
 
 export default function GoalsScreen() {
@@ -31,17 +32,17 @@ export default function GoalsScreen() {
 
     if (optionsResult.error) {
       Alert.alert('Hata', optionsResult.error.message);
-    } else {
-      setOptions(optionsResult.data || []);
+      setInitialLoading(false);
+      return;
     }
+
+    const loadedOptions = optionsResult.data || [];
+    setOptions(loadedOptions);
 
     if (goalsResult.error) {
       Alert.alert('Hata', goalsResult.error.message);
     } else {
-      const ids = (goalsResult.data || [])
-        .map((goal) => goal.goal_option_id)
-        .filter(Boolean);
-      setSelectedIds(ids);
+      setSelectedIds(mapSavedGoalsToSelectedIds(goalsResult.data || [], loadedOptions));
     }
 
     setInitialLoading(false);
@@ -77,9 +78,7 @@ export default function GoalsScreen() {
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <View style={styles.header}>
-        <Pressable onPress={() => router.back()} hitSlop={8}>
-          <Text style={styles.back}>← Geri</Text>
-        </Pressable>
+        <BackButton />
         <Text style={styles.headerTitle}>Hedeflerim</Text>
       </View>
 
@@ -106,13 +105,14 @@ export default function GoalsScreen() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
   header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.sm,
     paddingBottom: spacing.md,
-    gap: spacing.sm,
   },
-  back: { ...typography.body, color: colors.primary },
-  headerTitle: { ...typography.headingMedium, color: colors.textPrimary },
+  headerTitle: { ...typography.headingMedium, color: colors.textPrimary, flex: 1 },
   content: { padding: spacing.lg, gap: spacing.md, paddingBottom: spacing.xxl },
   loading: { ...typography.body, color: colors.textSecondary },
 });

@@ -1,0 +1,115 @@
+export const FALLBACK_SENSITIVITY_FOODS = [
+  {
+    food_key: 'milk',
+    food_name: 'Süt & Laktoz',
+    emoji: '🥛',
+    keywords: ['süt', 'laktoz', 'ayran', 'yoğurt', 'peynir', 'kefir', 'kaymak'],
+    sort_order: 1,
+  },
+  {
+    food_key: 'gluten',
+    food_name: 'Gluten & Buğday',
+    emoji: '🌾',
+    keywords: ['gluten', 'buğday', 'ekmek', 'makarna', 'börek', 'simit', 'un', 'bulgur'],
+    sort_order: 2,
+  },
+  {
+    food_key: 'egg',
+    food_name: 'Yumurta',
+    emoji: '🥚',
+    keywords: ['yumurta', 'menemen', 'omlet'],
+    sort_order: 3,
+  },
+  {
+    food_key: 'nuts',
+    food_name: 'Kuruyemiş',
+    emoji: '🥜',
+    keywords: ['fıstık', 'fındık', 'ceviz', 'badem', 'kuruyemiş', 'lokum'],
+    sort_order: 4,
+  },
+  {
+    food_key: 'legumes',
+    food_name: 'Baklagiller',
+    emoji: '🫘',
+    keywords: ['mercimek', 'nohut', 'fasulye', 'bakla', 'bezelye', 'barbunya'],
+    sort_order: 5,
+  },
+  {
+    food_key: 'onion_garlic',
+    food_name: 'Soğan & Sarımsak',
+    emoji: '🧅',
+    keywords: ['soğan', 'sarımsak'],
+    sort_order: 6,
+  },
+  {
+    food_key: 'tomato',
+    food_name: 'Domates',
+    emoji: '🍅',
+    keywords: ['domates', 'salça'],
+    sort_order: 7,
+  },
+  {
+    food_key: 'coffee',
+    food_name: 'Kahve',
+    emoji: '☕',
+    keywords: ['kahve', 'espresso', 'latte', 'cappuccino', 'türk kahvesi'],
+    sort_order: 8,
+  },
+  {
+    food_key: 'citrus',
+    food_name: 'Narenciye',
+    emoji: '🍊',
+    keywords: ['portakal', 'limon', 'greyfurt', 'mandalina'],
+    sort_order: 9,
+  },
+  {
+    food_key: 'spicy',
+    food_name: 'Acı Baharat',
+    emoji: '🌶️',
+    keywords: ['acı', 'isot', 'pul biber', 'harb'],
+    sort_order: 10,
+  },
+  {
+    food_key: 'chocolate',
+    food_name: 'Çikolata',
+    emoji: '🍫',
+    keywords: ['çikolata', 'kakao'],
+    sort_order: 11,
+  },
+  {
+    food_key: 'seafood',
+    food_name: 'Deniz Ürünleri',
+    emoji: '🦐',
+    keywords: ['balık', 'karides', 'midye', 'hamsi', 'levrek', 'somon', 'deniz'],
+    sort_order: 12,
+  },
+  {
+    food_key: 'soy',
+    food_name: 'Soya',
+    emoji: '🫛',
+    keywords: ['soya', 'tofu', 'edamame'],
+    sort_order: 13,
+  },
+  {
+    food_key: 'cabbage',
+    food_name: 'Lahana & Brokoli',
+    emoji: '🥦',
+    keywords: ['lahana', 'brokoli', 'karnabahar', 'brüksel'],
+    sort_order: 14,
+  },
+  {
+    food_key: 'fried',
+    food_name: 'Kızartma & Yağlı',
+    emoji: '🍟',
+    keywords: ['kızart', 'patates', 'tava'],
+    sort_order: 15,
+  },
+];
+
+export function mapFallbackSensitivityFoods() {
+  return FALLBACK_SENSITIVITY_FOODS.map((item) => ({
+    ...item,
+    id: item.food_key,
+    is_active: true,
+  }));
+}

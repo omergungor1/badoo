@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { Alert, StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../../context/AuthContext';
 import { addWaterLog, completeTask } from '../../services/logService';
 import Button from '../../components/ui/Button';
 import Card from '../../components/ui/Card';
+import Toast from '../../components/ui/Toast';
 import WaterGlassPicker from '../../components/ui/WaterGlassPicker';
 import { confirmCancel } from '../../utils/confirmCancel';
 import { GLASS_ML, glassesToMl } from '../../utils/water';
@@ -15,6 +16,8 @@ export default function AddWaterScreen() {
   const router = useRouter();
   const [glasses, setGlasses] = useState(1);
   const [loading, setLoading] = useState(false);
+  const [toastMessage, setToastMessage] = useState(null);
+  const hideToast = useCallback(() => setToastMessage(null), []);
 
   async function handleAdd() {
     if (!user?.id) return;
@@ -35,12 +38,13 @@ export default function AddWaterScreen() {
     }
 
     await completeTask(user.id, 'water');
-    Alert.alert('Kaydedildi', `${glasses} bardak (${amount} ml) su eklendi.`);
-    router.back();
+    setToastMessage(`${glasses} bardak (${amount} ml) su eklendi.`);
+    setTimeout(() => router.back(), 1000);
   }
 
   return (
     <View style={styles.content}>
+      <Toast message={toastMessage} onHide={hideToast} />
       <Text style={styles.title}>Su Ekle</Text>
       <Text style={styles.subtitle}>1 bardak = {GLASS_ML} ml</Text>
 

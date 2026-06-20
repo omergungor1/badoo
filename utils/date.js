@@ -43,6 +43,44 @@ export function getLastNDays(n) {
   return days;
 }
 
+export function getWeekStartMonday(date = new Date()) {
+  const d = startOfDay(date);
+  const day = d.getDay();
+  const diff = day === 0 ? 6 : day - 1;
+  d.setDate(d.getDate() - diff);
+  return d;
+}
+
+export function getFourWeekGridRows(endDate = new Date()) {
+  const today = startOfDay(endDate);
+  const todayDow = today.getDay() === 0 ? 6 : today.getDay() - 1;
+  const currentWeekMonday = new Date(today);
+  currentWeekMonday.setDate(today.getDate() - todayDow);
+
+  const rangeStart = new Date(today);
+  rangeStart.setDate(today.getDate() - 27);
+
+  const rows = [];
+  for (let weekOffset = 3; weekOffset >= 0; weekOffset -= 1) {
+    const rowMonday = new Date(currentWeekMonday);
+    rowMonday.setDate(currentWeekMonday.getDate() - weekOffset * 7);
+
+    const row = [];
+    for (let d = 0; d < 7; d += 1) {
+      const cellDate = new Date(rowMonday);
+      cellDate.setDate(rowMonday.getDate() + d);
+      const iso = toISODate(cellDate);
+      row.push({
+        date: iso,
+        inRange: cellDate >= startOfDay(rangeStart) && cellDate <= today,
+        isToday: iso === toISODate(today),
+      });
+    }
+    rows.push(row);
+  }
+  return rows;
+}
+
 export function isToday(dateString) {
   return toISODate(new Date(dateString)) === toISODate(new Date());
 }
