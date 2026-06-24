@@ -472,3 +472,317 @@ CREATE POLICY "device_push_tokens_own" ON badoo.device_push_tokens
   WITH CHECK (auth.uid() = user_id);
 
 GRANT SELECT, INSERT, UPDATE, DELETE ON badoo.device_push_tokens TO authenticated;
+
+-- Arkadaşlık, süreli notlar ve bildirimler
+CREATE TABLE IF NOT EXISTS badoo.friendships (
+  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  requester_id uuid NOT NULL,
+  addressee_id uuid NOT NULL,
+  status text NOT NULL DEFAULT 'pending',
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now(),
+  CONSTRAINT friendships_no_self CHECK (requester_id != addressee_id),
+  CONSTRAINT friendships_status_check CHECK (status IN ('pending', 'accepted', 'rejected'))
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS friendships_pair_unique ON badoo.friendships (
+  LEAST(requester_id, addressee_id),
+  GREATEST(requester_id, addressee_id)
+);
+
+CREATE TABLE IF NOT EXISTS badoo.friend_notes (
+  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  sender_id uuid NOT NULL,
+  receiver_id uuid NOT NULL,
+  message text NOT NULL,
+  duration_hours integer NOT NULL DEFAULT 8,
+  expires_at timestamptz NOT NULL,
+  parent_note_id uuid REFERENCES badoo.friend_notes(id) ON DELETE SET NULL,
+  read_at timestamptz,
+  created_at timestamptz DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS friend_notes_receiver_active_idx
+  ON badoo.friend_notes (receiver_id, expires_at DESC);
+
+CREATE TABLE IF NOT EXISTS badoo.friend_nudges (
+  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  sender_id uuid NOT NULL,
+  receiver_id uuid NOT NULL,
+  created_at timestamptz DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS badoo.notifications (
+  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id uuid NOT NULL,
+  sender_id uuid,
+  type text NOT NULL,
+  title text NOT NULL,
+  body text,
+  payload jsonb DEFAULT '{}',
+  read_at timestamptz,
+  created_at timestamptz DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS notifications_user_created_idx
+  ON badoo.notifications (user_id, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS notifications_user_unread_idx
+  ON badoo.notifications (user_id)
+  WHERE read_at IS NULL;
+
+-- Arkadaşlık kontrol fonksiyonu
+CREATE OR REPLACE FUNCTION badoo.are_friends(user_a uuid, user_b uuid)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = badoo
+AS $$
+  SELECT EXISTS (
+    SELECT 1
+    FROM badoo.friendships f
+    WHERE f.status = 'accepted'
+      AND (
+        (f.requester_id = user_a AND f.addressee_id = user_b)
+        OR (f.requester_id = user_b AND f.addressee_id = user_a)
+      )
+  );
+$$;
+
+GRANT EXECUTE ON FUNCTION badoo.are_friends(uuid, uuid) TO authenticated;
+
+-- RLS
+ALTER TABLE badoo.friendships ENABLE ROW LEVEL SECURITY;
+ALTER TABLE badoo.friend_notes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE badoo.friend_nudges ENABLE ROW LEVEL SECURITY;
+ALTER TABLE badoo.notifications ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "profiles_discover" ON badoo.profiles;
+CREATE POLICY "profiles_discover" ON badoo.profiles
+  FOR SELECT TO authenticated
+  USING (onboarding_completed = true AND user_id IS NOT NULL);
+
+DROP POLICY IF EXISTS "friendships_participant" ON badoo.friendships;
+CREATE POLICY "friendships_participant" ON badoo.friendships
+  FOR ALL TO authenticated
+  USING (auth.uid() = requester_id OR auth.uid() = addressee_id)
+  WITH CHECK (auth.uid() = requester_id OR auth.uid() = addressee_id);
+
+DROP POLICY IF EXISTS "friend_notes_participant" ON badoo.friend_notes;
+CREATE POLICY "friend_notes_participant" ON badoo.friend_notes
+  FOR ALL TO authenticated
+  USING (auth.uid() = sender_id OR auth.uid() = receiver_id)
+  WITH CHECK (
+    auth.uid() = sender_id
+    AND badoo.are_friends(auth.uid(), receiver_id)
+  );
+
+DROP POLICY IF EXISTS "friend_nudges_participant" ON badoo.friend_nudges;
+CREATE POLICY "friend_nudges_participant" ON badoo.friend_nudges
+  FOR ALL TO authenticated
+  USING (auth.uid() = sender_id OR auth.uid() = receiver_id)
+  WITH CHECK (
+    auth.uid() = sender_id
+    AND badoo.are_friends(auth.uid(), receiver_id)
+  );
+
+DROP POLICY IF EXISTS "notifications_own" ON badoo.notifications;
+CREATE POLICY "notifications_own" ON badoo.notifications
+  FOR SELECT TO authenticated
+  USING (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "notifications_insert" ON badoo.notifications;
+CREATE POLICY "notifications_insert" ON badoo.notifications
+  FOR INSERT TO authenticated
+  WITH CHECK (
+    auth.uid() = sender_id
+    OR sender_id IS NULL
+  );
+
+DROP POLICY IF EXISTS "notifications_update_own" ON badoo.notifications;
+CREATE POLICY "notifications_update_own" ON badoo.notifications
+  FOR UPDATE TO authenticated
+  USING (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);
+
+-- Arkadaşların günlük halka verisini görmek için okuma
+DROP POLICY IF EXISTS "food_logs_friends_read" ON badoo.food_logs;
+CREATE POLICY "food_logs_friends_read" ON badoo.food_logs
+  FOR SELECT TO authenticated
+  USING (badoo.are_friends(auth.uid(), user_id));
+
+DROP POLICY IF EXISTS "water_logs_friends_read" ON badoo.water_logs;
+CREATE POLICY "water_logs_friends_read" ON badoo.water_logs
+  FOR SELECT TO authenticated
+  USING (badoo.are_friends(auth.uid(), user_id));
+
+DROP POLICY IF EXISTS "activity_logs_friends_read" ON badoo.activity_logs;
+CREATE POLICY "activity_logs_friends_read" ON badoo.activity_logs
+  FOR SELECT TO authenticated
+  USING (badoo.are_friends(auth.uid(), user_id));
+
+GRANT SELECT, INSERT, UPDATE, DELETE ON badoo.friendships TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON badoo.friend_notes TO authenticated;
+GRANT SELECT, INSERT ON badoo.friend_nudges TO authenticated;
+GRANT SELECT, INSERT, UPDATE ON badoo.notifications TO authenticated;
+
+-- AI sağlık analizleri (RLS kapalı MVP)
+CREATE TABLE IF NOT EXISTS badoo.health_ai_analyses (
+  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id uuid NOT NULL,
+  title text NOT NULL,
+  summary text,
+  analysis_text text NOT NULL,
+  input_snapshot jsonb DEFAULT '{}',
+  period_start date NOT NULL,
+  period_end date NOT NULL,
+  model text DEFAULT 'gpt-4o-mini',
+  status text NOT NULL DEFAULT 'completed',
+  created_at timestamptz DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS health_ai_analyses_user_created_idx
+  ON badoo.health_ai_analyses (user_id, created_at DESC);
+
+GRANT SELECT, INSERT, UPDATE, DELETE ON badoo.health_ai_analyses TO authenticated;
+
+-- Mesaj insert → push bildirimi (edge function: on-friend-message)
+CREATE EXTENSION IF NOT EXISTS pg_net WITH SCHEMA extensions;
+
+CREATE TABLE IF NOT EXISTS badoo.runtime_config (
+  key text PRIMARY KEY,
+  value text NOT NULL
+);
+
+COMMENT ON TABLE badoo.runtime_config IS
+  'Deploy sonrası doldur: friend_message_webhook_url, webhook_secret, service_role_key';
+
+ALTER TABLE badoo.runtime_config ENABLE ROW LEVEL SECURITY;
+
+CREATE OR REPLACE FUNCTION badoo.trigger_friend_message_push()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = badoo, public, extensions
+AS $$
+DECLARE
+  webhook_url text;
+  webhook_secret text;
+  service_role_key text;
+  req_headers jsonb;
+BEGIN
+  SELECT value INTO webhook_url FROM badoo.runtime_config WHERE key = 'friend_message_webhook_url';
+  SELECT value INTO webhook_secret FROM badoo.runtime_config WHERE key = 'webhook_secret';
+  SELECT value INTO service_role_key FROM badoo.runtime_config WHERE key = 'service_role_key';
+
+  IF webhook_url IS NULL OR webhook_url = '' THEN
+    RETURN NEW;
+  END IF;
+
+  IF (webhook_secret IS NULL OR webhook_secret = '')
+     AND (service_role_key IS NULL OR service_role_key = '') THEN
+    RETURN NEW;
+  END IF;
+
+  req_headers := jsonb_build_object('Content-Type', 'application/json');
+
+  IF webhook_secret IS NOT NULL AND webhook_secret <> '' THEN
+    req_headers := req_headers || jsonb_build_object('X-Webhook-Secret', webhook_secret);
+  END IF;
+
+  IF service_role_key IS NOT NULL AND service_role_key <> '' THEN
+    req_headers := req_headers || jsonb_build_object('Authorization', 'Bearer ' || service_role_key);
+  END IF;
+
+  PERFORM net.http_post(
+    url := webhook_url,
+    headers := req_headers,
+    body := jsonb_build_object(
+      'type', TG_OP,
+      'table', TG_TABLE_NAME,
+      'schema', TG_TABLE_SCHEMA,
+      'record', to_jsonb(NEW)
+    ),
+    timeout_milliseconds := 5000
+  );
+
+  RETURN NEW;
+EXCEPTION
+  WHEN OTHERS THEN
+    RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS friend_notes_push_after_insert ON badoo.friend_notes;
+CREATE TRIGGER friend_notes_push_after_insert
+  AFTER INSERT ON badoo.friend_notes
+  FOR EACH ROW
+  EXECUTE FUNCTION badoo.trigger_friend_message_push();
+
+-- Deploy sonrası SQL Editor'de çalıştır:
+-- INSERT INTO badoo.runtime_config (key, value) VALUES
+--   ('friend_message_webhook_url', 'https://YOUR_PROJECT_REF.supabase.co/functions/v1/on-friend-message'),
+--   ('webhook_secret', 'YOUR_WEBHOOK_SECRET'),
+--   ('service_role_key', 'YOUR_SERVICE_ROLE_KEY')
+-- ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;
+--
+-- DOĞRU URL:  .../functions/v1/on-friend-message  (sonunda TEK kez!)
+-- YANLIŞ URL: .../on-friend-message/on-friend-message
+-- YANLIŞ URL: .../send-push-notification/on-friend-message
+
+-- 12) Stories (24 saatlik, Instagram benzeri)
+CREATE TABLE IF NOT EXISTS badoo.stories (
+  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id uuid NOT NULL,
+  image_url text NOT NULL,
+  image_path text NOT NULL,
+  expires_at timestamptz NOT NULL,
+  created_at timestamptz DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS stories_user_active_idx
+  ON badoo.stories (user_id, expires_at DESC);
+
+CREATE INDEX IF NOT EXISTS stories_expires_at_idx
+  ON badoo.stories (expires_at);
+
+ALTER TABLE badoo.stories DISABLE ROW LEVEL SECURITY;
+
+GRANT SELECT, INSERT, UPDATE, DELETE ON badoo.stories TO anon, authenticated, service_role;
+
+-- stories storage bucket (public read, MVP açık yazma)
+INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+VALUES (
+  'stories',
+  'stories',
+  true,
+  10485760,
+  ARRAY['image/jpeg', 'image/png', 'image/webp']
+)
+ON CONFLICT (id) DO UPDATE SET
+  public = EXCLUDED.public,
+  file_size_limit = EXCLUDED.file_size_limit,
+  allowed_mime_types = EXCLUDED.allowed_mime_types;
+
+DROP POLICY IF EXISTS "stories_public_read" ON storage.objects;
+CREATE POLICY "stories_public_read" ON storage.objects
+  FOR SELECT TO public
+  USING (bucket_id = 'stories');
+
+DROP POLICY IF EXISTS "stories_insert_mvp" ON storage.objects;
+CREATE POLICY "stories_insert_mvp" ON storage.objects
+  FOR INSERT TO anon, authenticated
+  WITH CHECK (bucket_id = 'stories');
+
+DROP POLICY IF EXISTS "stories_update_mvp" ON storage.objects;
+CREATE POLICY "stories_update_mvp" ON storage.objects
+  FOR UPDATE TO anon, authenticated
+  USING (bucket_id = 'stories')
+  WITH CHECK (bucket_id = 'stories');
+
+DROP POLICY IF EXISTS "stories_delete_mvp" ON storage.objects;
+CREATE POLICY "stories_delete_mvp" ON storage.objects
+  FOR DELETE TO anon, authenticated
+  USING (bucket_id = 'stories');
+

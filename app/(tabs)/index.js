@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState } from 'react';
 import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { DAILY_TASK_RING_CONFIG, NUTRITION_RING_CONFIG } from '../../constants/onboarding';
@@ -7,6 +8,10 @@ import { useAuth } from '../../context/AuthContext';
 import { calculateFoodTotals, getFoodLogsForDay } from '../../services/foodService';
 import { getAllDailyTasksForToday, getLogsForDate } from '../../services/logService';
 import { useAppleHealthSync } from '../../hooks/useAppleHealthSync';
+import { getActiveNotesForUser } from '../../services/friendNoteService';
+import { getFriendsWithRings } from '../../services/friendService';
+import { getUnreadNotificationCount } from '../../services/notificationService';
+import FriendCard from '../../components/friends/FriendCard';
 import Card from '../../components/ui/Card';
 import DailyActivityRings from '../../components/ui/DailyActivityRings';
 import ProgressRing from '../../components/ui/ProgressRing';
@@ -52,7 +57,10 @@ export default function HomeScreen() {
     distanceKm: 0,
     durationMinutes: 0,
   });
+  const [friends, setFriends] = useState([]);
+  const [notesBySender, setNotesBySender] = useState({});
   const [digestionScores, setDigestionScores] = useState([]);
+  const [notificationCount, setNotificationCount] = useState(0);
 
   const calorieGoal = profile?.daily_calorie_goal || 2000;
   const proteinGoal = profile?.daily_protein_goal || 100;
@@ -133,6 +141,24 @@ export default function HomeScreen() {
     const foodTotals = calculateFoodTotals(foodLogs || []);
     setTotals(foodTotals);
 
+    const [{ data: friendData }, { data: notes }, { count: unreadCount }] = await Promise.all([
+      getFriendsWithRings(user.id),
+      getActiveNotesForUser(user.id),
+      getUnreadNotificationCount(user.id),
+    ]);
+
+    setNotificationCount(unreadCount || 0);
+
+    setFriends(friendData || []);
+
+    const grouped = {};
+    (notes || []).forEach((note) => {
+      if (!grouped[note.sender_id]) {
+        grouped[note.sender_id] = note;
+      }
+    });
+    setNotesBySender(grouped);
+
     const days = getLastNDays(28);
     const scoreResults = await Promise.all(
       days.map(async (date) => {
@@ -201,14 +227,65 @@ export default function HomeScreen() {
         contentContainerStyle={styles.content}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
       >
-        <Text style={styles.greeting}>Bugün nasılsın?</Text>
-        <Text style={styles.subGreeting}>
-          {allNutritionRingsClosed
-            ? 'Tüm halkalar kapandı, harika gidiyorsun!'
-            : `Halkaların ortalama %${nutritionAverage} doldu`}
-        </Text>
+        <View style={styles.headerRow}>
+          <View style={styles.headerText}>
+            <Text style={styles.greeting}>Bugün nasılsın?</Text>
+            <Text style={styles.subGreeting}>
+              {allNutritionRingsClosed
+                ? 'Tüm halkalar kapandı, harika gidiyorsun!'
+                : `Halkaların ortalama %${nutritionAverage} doldu`}
+            </Text>
+          </View>
+          <Pressable
+            onPress={() => router.push('/notifications')}
+            style={({ pressed }) => [styles.bellButton, pressed && styles.bellButtonPressed]}
+            accessibilityLabel="Bildirimler"
+            accessibilityRole="button"
+          >
+            <Ionicons name="notifications-outline" size={24} color={colors.textPrimary} />
+            {notificationCount > 0 ? (
+              <View style={styles.badge}>
+                <Text style={styles.badgeText}>
+                  {notificationCount > 99 ? '99+' : notificationCount}
+                </Text>
+              </View>
+            ) : null}
+          </Pressable>
+        </View>
 
         <DailyActivityRings rings={nutritionRings} />
+
+        {friends.length ? (
+          <>
+            <SectionTitle
+              title="Arkadaşların"
+              subtitle="Bugünkü halkalarını takip et"
+            />
+            <View style={styles.friendsList}>
+              {friends.map((friend) => (
+                <FriendCard
+                  key={friend.id}
+                  friend={friend}
+                  note={notesBySender[friend.friendId]}
+                  compact
+                  onPress={() => router.push(`/friends/${friend.friendId}`)}
+                />
+              ))}
+            </View>
+            <Pressable onPress={() => router.push('/friends')}>
+              <Text style={styles.friendsLink}>Tüm arkadaşları gör →</Text>
+            </Pressable>
+          </>
+        ) : (
+          <Pressable onPress={() => router.push('/friends/add')}>
+            <Card variant="light">
+              <Text style={styles.friendsCtaTitle}>Arkadaş ekle</Text>
+              <Text style={styles.friendsCtaText}>
+                Arkadaşlarının halkalarını gör, not bırak ve birbirinizi dürtün.
+              </Text>
+            </Card>
+          </Pressable>
+        )}
 
         <SectionTitle title="Günlük Görevler" subtitle="Kayıt yaparak görevleri tamamla" />
         <View style={styles.taskList}>
@@ -262,8 +339,45 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
   content: { padding: spacing.lg, gap: spacing.md, paddingBottom: spacing.xxl },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: spacing.md,
+  },
+  headerText: { flex: 1, gap: 4 },
   greeting: { ...typography.h1, color: colors.textPrimary },
   subGreeting: { ...typography.body, color: colors.textSecondary },
+  bellButton: {
+    width: 44,
+    height: 44,
+    borderRadius: radius.lg,
+    backgroundColor: colors.white,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bellButtonPressed: { opacity: 0.7 },
+  badge: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+  },
+  badgeText: {
+    ...typography.caption,
+    color: colors.white,
+    fontFamily: typography.bodySemiBold.fontFamily,
+    fontSize: 10,
+    lineHeight: 12,
+  },
   taskList: { gap: spacing.sm },
   taskCard: {
     flexDirection: 'row',
@@ -287,4 +401,13 @@ const styles = StyleSheet.create({
     color: colors.primary,
   },
   doneText: { ...typography.body, color: colors.textPrimary },
+  friendsList: { gap: spacing.sm },
+  friendsLink: {
+    ...typography.bodySmall,
+    color: colors.primary,
+    fontFamily: typography.bodySemiBold.fontFamily,
+    textAlign: 'center',
+  },
+  friendsCtaTitle: { ...typography.bodySemiBold, color: colors.textPrimary },
+  friendsCtaText: { ...typography.bodySmall, color: colors.textSecondary },
 });

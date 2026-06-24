@@ -219,6 +219,78 @@ create table badoo.device_push_tokens (
   unique (user_id, fcm_token)
 );
 
+create table badoo.friendships (
+  id uuid primary key default uuid_generate_v4(),
+  requester_id uuid not null,
+  addressee_id uuid not null,
+  status text not null default 'pending',
+  created_at timestamptz default now(),
+  updated_at timestamptz default now(),
+  constraint friendships_no_self check (requester_id != addressee_id),
+  constraint friendships_status_check check (status in ('pending', 'accepted', 'rejected'))
+);
+
+create unique index friendships_pair_unique on badoo.friendships (
+  least(requester_id, addressee_id),
+  greatest(requester_id, addressee_id)
+);
+
+create table badoo.friend_notes (
+  id uuid primary key default uuid_generate_v4(),
+  sender_id uuid not null,
+  receiver_id uuid not null,
+  message text not null,
+  duration_hours integer not null default 8,
+  expires_at timestamptz not null,
+  parent_note_id uuid references badoo.friend_notes(id) on delete set null,
+  read_at timestamptz,
+  created_at timestamptz default now()
+);
+
+create table badoo.friend_nudges (
+  id uuid primary key default uuid_generate_v4(),
+  sender_id uuid not null,
+  receiver_id uuid not null,
+  created_at timestamptz default now()
+);
+
+create table badoo.notifications (
+  id uuid primary key default uuid_generate_v4(),
+  user_id uuid not null,
+  sender_id uuid,
+  type text not null,
+  title text not null,
+  body text,
+  payload jsonb default '{}',
+  read_at timestamptz,
+  created_at timestamptz default now()
+);
+
+create table badoo.health_ai_analyses (
+  id uuid primary key default uuid_generate_v4(),
+  user_id uuid not null,
+  title text not null,
+  summary text,
+  analysis_text text not null,
+  input_snapshot jsonb default '{}',
+  period_start date not null,
+  period_end date not null,
+  model text default 'gpt-4o-mini',
+  status text not null default 'completed',
+  created_at timestamptz default now()
+);
+
+create table badoo.stories (
+  id uuid primary key default uuid_generate_v4(),
+  user_id uuid not null,
+  image_url text not null,
+  image_path text not null,
+  expires_at timestamptz not null,
+  created_at timestamptz default now()
+);
+
+create index stories_user_active_idx on badoo.stories (user_id, expires_at desc);
+
 -- MVP Data API yetkileri (db_migrations.sql bölüm 11 ile de uygulanır)
 -- GRANT USAGE ON SCHEMA badoo TO anon, authenticated, service_role;
 -- GRANT SELECT ON badoo.common_sensitivity_foods TO anon, authenticated, service_role;

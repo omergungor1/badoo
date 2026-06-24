@@ -13,6 +13,7 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import ProfileAvatar from '../../components/profile/ProfileAvatar';
 import ProfileImageViewer from '../../components/profile/ProfileImageViewer';
+import StoryRow from '../../components/stories/StoryRow';
 import Button from '../../components/ui/Button';
 import { useAuth } from '../../context/AuthContext';
 import {
@@ -27,6 +28,13 @@ import {
   getSensitivities,
   updateProfile,
 } from '../../services/profileService';
+import {
+  getFriends,
+  getIncomingFriendRequests,
+} from '../../services/friendService';
+import { getUnreadNotificationCount } from '../../services/notificationService';
+import { getActiveStories } from '../../services/storyService';
+import { subscribeStoryShared } from '../../utils/storyEvents';
 import { formatActivityValue, getActivityGoal } from '../../utils/activity';
 import { formatWaterGoal } from '../../utils/water';
 import { colors, radius, spacing, typography } from '../../theme';
@@ -71,6 +79,9 @@ export default function ProfileScreen() {
   const [conditions, setConditions] = useState([]);
   const [sensitivities, setSensitivities] = useState([]);
   const [medications, setMedications] = useState([]);
+  const [friendCount, setFriendCount] = useState(0);
+  const [requestCount, setRequestCount] = useState(0);
+  const [notificationCount, setNotificationCount] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
   const [nickname, setNickname] = useState('');
   const [bio, setBio] = useState('');
@@ -78,6 +89,8 @@ export default function ProfileScreen() {
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [localThumbUri, setLocalThumbUri] = useState(null);
   const [viewerOpen, setViewerOpen] = useState(false);
+  const [stories, setStories] = useState([]);
+  const [openStoryAt, setOpenStoryAt] = useState(null);
 
   const displayNickname = defaultNickname(profile, user);
 
@@ -104,17 +117,25 @@ export default function ProfileScreen() {
   const loadProfileData = useCallback(async () => {
     if (!user?.id) return;
 
-    const [g, c, s, m] = await Promise.all([
+    const [g, c, s, m, friends, requests, notifications, activeStories] = await Promise.all([
       getGoals(user.id),
       getConditions(user.id),
       getSensitivities(user.id),
       getMedications(user.id),
+      getFriends(user.id),
+      getIncomingFriendRequests(user.id),
+      getUnreadNotificationCount(user.id),
+      getActiveStories(user.id),
     ]);
 
     setGoals(g.data || []);
     setConditions(c.data || []);
     setSensitivities(s.data || []);
     setMedications(m.data || []);
+    setFriendCount(friends.data?.length || 0);
+    setRequestCount(requests.data?.length || 0);
+    setNotificationCount(notifications.count || 0);
+    setStories(activeStories.data || []);
   }, [user?.id]);
 
   useFocusEffect(
@@ -123,6 +144,14 @@ export default function ProfileScreen() {
       if (user?.id) refreshProfile(user.id);
     }, [loadProfileData, refreshProfile, user?.id]),
   );
+
+  useEffect(() => {
+    return subscribeStoryShared(() => {
+      if (user?.id) {
+        getActiveStories(user.id).then(({ data }) => setStories(data || []));
+      }
+    });
+  }, [user?.id]);
 
   async function onRefresh() {
     setRefreshing(true);
@@ -221,6 +250,18 @@ export default function ProfileScreen() {
   }
 
   function handleAvatarPress() {
+    if (stories.length) {
+      setOpenStoryAt(0);
+      return;
+    }
+    if (originalUri) {
+      setViewerOpen(true);
+      return;
+    }
+    handleUploadPhoto();
+  }
+
+  function handleAvatarLongPress() {
     if (originalUri) {
       setViewerOpen(true);
       return;
@@ -266,6 +307,8 @@ export default function ProfileScreen() {
             thumbUri={thumbUri}
             uploading={uploadingPhoto}
             onPress={handleAvatarPress}
+            onLongPress={handleAvatarLongPress}
+            storyRingActive={stories.length > 0}
           />
 
           <View style={styles.statsRow}>
@@ -274,6 +317,16 @@ export default function ProfileScreen() {
             <StatItem value={medications.length} label="İlaç" />
           </View>
         </View>
+
+        <StoryRow
+          stories={stories}
+          userName={displayNickname}
+          isOwner
+          showLabel
+          onStoriesChange={setStories}
+          openAtIndex={openStoryAt}
+          onViewerClosed={() => setOpenStoryAt(null)}
+        />
 
         <View style={styles.identityBlock}>
           <TextInput
@@ -328,6 +381,10 @@ export default function ProfileScreen() {
         </View>
 
         <View style={styles.menuSection}>
+          <ProfileMenuRow title="Bildirimler" count={notificationCount} onPress={() => router.push('/notifications')} />
+          <ProfileMenuRow title="Arkadaşlarım" count={friendCount} onPress={() => router.push('/friends')} />
+          <ProfileMenuRow title="Gelen İstekler" count={requestCount} onPress={() => router.push('/friends/requests')} />
+          <ProfileMenuRow title="Arkadaş Ekle" onPress={() => router.push('/friends/add')} />
           <ProfileMenuRow title="İstatistikler" onPress={() => router.push('/stats')} />
           <ProfileMenuRow title="Hedefler" count={goals.length} onPress={() => router.push('/goals')} />
           <ProfileMenuRow title="Hastalıklar" count={conditions.length} onPress={() => router.push('/conditions')} />

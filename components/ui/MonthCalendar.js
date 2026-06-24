@@ -4,13 +4,94 @@ import {
   formatMonthYear,
   getMonthDays,
   getMonthStartOffset,
-  isToday,
   parseISODate,
   toISODate,
 } from '../../utils/date';
 import { colors, radius, spacing, typography } from '../../theme';
 
 const WEEKDAYS = ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'];
+
+function chunkWeeks(cells) {
+  const padded = [...cells];
+  while (padded.length % 7 !== 0) {
+    padded.push(null);
+  }
+
+  const weeks = [];
+  for (let index = 0; index < padded.length; index += 7) {
+    weeks.push(padded.slice(index, index + 7));
+  }
+
+  return weeks;
+}
+
+function renderDayCell(date, cellKey, { selectedDate, dayScores, dayMarkers, onSelectDate, today }) {
+  if (!date) {
+    return <View key={cellKey} style={styles.cell} />;
+  }
+
+  const dayNumber = parseISODate(date).getDate();
+  const selected = date === selectedDate;
+  const todayMark = date === today;
+  const disabled = date > today;
+  const score = dayScores[date]?.score;
+  const hasData = dayScores[date]?.hasData;
+  const indicatorColor = hasData && score != null ? getScoreColor(score) : null;
+  const periodMarker = dayMarkers[date];
+  const inPeriod = periodMarker?.inPeriod;
+
+  return (
+    <Pressable
+      key={cellKey}
+      disabled={disabled}
+      onPress={() => onSelectDate?.(date)}
+      style={[
+        styles.cell,
+        inPeriod && styles.cellPeriod,
+        selected && styles.cellSelected,
+        todayMark && !selected && styles.cellToday,
+        disabled && styles.cellDisabled,
+      ]}
+    >
+      <Text
+        style={[
+          styles.dayNumber,
+          selected && styles.dayNumberSelected,
+          disabled && styles.dayNumberDisabled,
+          inPeriod && !selected && styles.dayNumberPeriod,
+        ]}
+      >
+        {dayNumber}
+      </Text>
+      <View style={styles.indicators}>
+        {indicatorColor ? (
+          <View style={[styles.indicator, { backgroundColor: indicatorColor }]} />
+        ) : (
+          <View style={styles.indicatorPlaceholder} />
+        )}
+        {inPeriod ? (
+          <View
+            style={[
+              styles.indicator,
+              styles.periodIndicator,
+              periodMarker.isStart && styles.periodStart,
+              periodMarker.isEnd && styles.periodEnd,
+            ]}
+          />
+        ) : (
+          <View style={styles.indicatorPlaceholder} />
+        )}
+      </View>
+      {periodMarker?.isStart && periodMarker?.isEnd ? (
+        <Text style={styles.periodTag}>Baş/Bit</Text>
+      ) : periodMarker?.isStart ? (
+        <Text style={styles.periodTag}>Baş</Text>
+      ) : periodMarker?.isEnd ? (
+        <Text style={styles.periodTag}>Bit</Text>
+      ) : null}
+    </Pressable>
+  );
+}
 
 export default function MonthCalendar({
   year,
@@ -25,10 +106,7 @@ export default function MonthCalendar({
   const days = getMonthDays(year, month);
   const offset = getMonthStartOffset(year, month);
   const cells = [...Array(offset).fill(null), ...days];
-
-  function canSelect(date) {
-    return date <= today;
-  }
+  const weeks = chunkWeeks(cells);
 
   function handlePrevMonth() {
     onMonthChange?.(month === 0 ? { year: year - 1, month: 11 } : { year, month: month - 1 });
@@ -70,73 +148,19 @@ export default function MonthCalendar({
       </View>
 
       <View style={styles.grid}>
-        {cells.map((date, index) => {
-          if (!date) {
-            return <View key={`empty-${index}`} style={styles.cell} />;
-          }
-
-          const dayNumber = parseISODate(date).getDate();
-          const selected = date === selectedDate;
-          const todayMark = isToday(date);
-          const disabled = !canSelect(date);
-          const score = dayScores[date]?.score;
-          const hasData = dayScores[date]?.hasData;
-          const indicatorColor = hasData && score != null ? getScoreColor(score) : null;
-          const periodMarker = dayMarkers[date];
-          const inPeriod = periodMarker?.inPeriod;
-
-          return (
-            <Pressable
-              key={date}
-              disabled={disabled}
-              onPress={() => onSelectDate?.(date)}
-              style={[
-                styles.cell,
-                inPeriod && styles.cellPeriod,
-                selected && styles.cellSelected,
-                todayMark && !selected && styles.cellToday,
-                disabled && styles.cellDisabled,
-              ]}
-            >
-              <Text
-                style={[
-                  styles.dayNumber,
-                  selected && styles.dayNumberSelected,
-                  disabled && styles.dayNumberDisabled,
-                  inPeriod && !selected && styles.dayNumberPeriod,
-                ]}
-              >
-                {dayNumber}
-              </Text>
-              <View style={styles.indicators}>
-                {indicatorColor ? (
-                  <View style={[styles.indicator, { backgroundColor: indicatorColor }]} />
-                ) : (
-                  <View style={styles.indicatorPlaceholder} />
-                )}
-                {inPeriod ? (
-                  <View
-                    style={[
-                      styles.indicator,
-                      styles.periodIndicator,
-                      periodMarker.isStart && styles.periodStart,
-                      periodMarker.isEnd && styles.periodEnd,
-                    ]}
-                  />
-                ) : (
-                  <View style={styles.indicatorPlaceholder} />
-                )}
-              </View>
-              {periodMarker?.isStart && periodMarker?.isEnd ? (
-                <Text style={styles.periodTag}>Baş/Bit</Text>
-              ) : periodMarker?.isStart ? (
-                <Text style={styles.periodTag}>Baş</Text>
-              ) : periodMarker?.isEnd ? (
-                <Text style={styles.periodTag}>Bit</Text>
-              ) : null}
-            </Pressable>
-          );
-        })}
+        {weeks.map((week, weekIndex) => (
+          <View key={`week-${weekIndex}`} style={styles.weekRow}>
+            {week.map((date, dayIndex) =>
+              renderDayCell(date, date || `empty-${weekIndex}-${dayIndex}`, {
+                selectedDate,
+                dayScores,
+                dayMarkers,
+                onSelectDate,
+                today,
+              }),
+            )}
+          </View>
+        ))}
       </View>
     </View>
   );
@@ -183,11 +207,13 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
   },
   grid: {
+    gap: 2,
+  },
+  weekRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
   },
   cell: {
-    width: `${100 / 7}%`,
+    flex: 1,
     aspectRatio: 1,
     alignItems: 'center',
     justifyContent: 'center',

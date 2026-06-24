@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { useRouter } from 'expo-router';
 import { isPushSupported } from '../lib/firebaseMessaging';
 import {
   getFcmToken,
@@ -8,7 +9,16 @@ import {
 } from '../services/pushNotificationService';
 import { removePushToken, savePushToken } from '../services/pushTokenService';
 
+function handleNotificationRoute(router, remoteMessage) {
+  const route = remoteMessage?.data?.route;
+  if (route) {
+    router.push(route);
+  }
+}
+
 export function usePushNotifications(userId) {
+  const router = useRouter();
+
   useEffect(() => {
     if (!userId || !isPushSupported()) {
       return undefined;
@@ -47,9 +57,7 @@ export function usePushNotifications(userId) {
     });
 
     const unsubscribeOpened = subscribeToNotificationOpened((remoteMessage) => {
-      if (__DEV__) {
-        console.log('[FCM] notification opened', remoteMessage?.data);
-      }
+      handleNotificationRoute(router, remoteMessage);
     });
 
     return () => {
@@ -62,5 +70,5 @@ export function usePushNotifications(userId) {
         removePushToken(userId, activeToken);
       }
     };
-  }, [userId]);
+  }, [userId, router]);
 }

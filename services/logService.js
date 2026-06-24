@@ -1,6 +1,6 @@
 import { getDb } from '../lib/db';
 import { DAILY_TASKS } from '../constants/onboarding';
-import { toISODate } from '../utils/date';
+import { endOfDay, parseISODate, startOfDay, toISODate } from '../utils/date';
 
 export async function addWaterLog({ userId, amount, timestamp }) {
   return getDb()
@@ -114,45 +114,69 @@ export async function addActivityLog({
 }
 
 export async function upsertAppleHealthActivity({ userId, logDate, steps, distanceKm }) {
-  const start = `${logDate}T00:00:00.000Z`;
-  const end = `${logDate}T23:59:59.999Z`;
+  const dayStart = startOfDay(parseISODate(logDate)).toISOString();
+  const dayEnd = endOfDay(parseISODate(logDate)).toISOString();
+  const incomingSteps = Math.max(0, Math.round(Number(steps) || 0));
+  const incomingDistance = Math.max(0, Number(Number(distanceKm || 0).toFixed(2)));
 
   const { data: existing, error: fetchError } = await getDb()
     .from('activity_logs')
-    .select('id')
+    .select('id, steps, distance')
     .eq('user_id', userId)
     .eq('source', 'apple_health')
-    .gte('timestamp', start)
-    .lte('timestamp', end)
+    .gte('timestamp', dayStart)
+    .lte('timestamp', dayEnd)
     .maybeSingle();
 
   if (fetchError) {
     return { data: null, error: fetchError };
   }
 
-  const payload = {
-    activity_name: 'Apple Sağlık',
-    duration: 0,
-    steps: steps || 0,
-    distance: distanceKm || 0,
-    source: 'apple_health',
-    timestamp: `${logDate}T12:00:00.000Z`,
-  };
-
   if (existing?.id) {
+    const existingSteps = Math.max(0, Math.round(Number(existing.steps) || 0));
+    const existingDistance = Math.max(0, Number(Number(existing.distance || 0).toFixed(2)));
+
+    // Apple Sağlık gece 00:00'da yeni gün için 0 döner; mevcut günün kaydını silme/azaltma
+    if (incomingSteps === 0 && incomingDistance === 0 && (existingSteps > 0 || existingDistance > 0)) {
+      return { data: existing, error: null, skipped: true };
+    }
+
+    const nextSteps = Math.max(existingSteps, incomingSteps);
+    const nextDistance = Math.max(existingDistance, incomingDistance);
+
+    if (nextSteps === existingSteps && nextDistance === existingDistance) {
+      return { data: existing, error: null, skipped: true };
+    }
+
     return getDb()
       .from('activity_logs')
-      .update(payload)
+      .update({
+        activity_name: 'Apple Sağlık',
+        duration: 0,
+        steps: nextSteps,
+        distance: nextDistance,
+        source: 'apple_health',
+      })
       .eq('id', existing.id)
       .select()
       .single();
+  }
+
+  // Yeni gün: 0 ile başlamak normal (henüz adım yok)
+  if (incomingSteps === 0 && incomingDistance === 0) {
+    return { data: null, error: null, skipped: true };
   }
 
   return getDb()
     .from('activity_logs')
     .insert({
       user_id: userId,
-      ...payload,
+      activity_name: 'Apple Sağlık',
+      duration: 0,
+      steps: incomingSteps,
+      distance: incomingDistance,
+      source: 'apple_health',
+      timestamp: parseISODate(logDate).toISOString(),
     })
     .select()
     .single();
@@ -288,15 +312,15 @@ export async function getTimelineForDay(userId, start, end) {
 }
 
 export async function getLogsForDate(userId, date) {
-  const start = `${date}T00:00:00.000Z`;
-  const end = `${date}T23:59:59.999Z`;
+  const start = startOfDay(parseISODate(date)).toISOString();
+  const end = endOfDay(parseISODate(date)).toISOString();
 
   const [symptoms, sleep, status, stool, foodLogs, waterLogs, activityLogs] = await Promise.all([
     getDb().from('symptom_logs').select('*').eq('user_id', userId).gte('timestamp', start).lte('timestamp', end),
     getDb().from('sleep_logs').select('*').eq('user_id', userId).gte('timestamp', start).lte('timestamp', end),
     getDb().from('daily_status_logs').select('*').eq('user_id', userId).gte('timestamp', start).lte('timestamp', end),
     getDb().from('stool_logs').select('*').eq('user_id', userId).gte('time', start).lte('time', end),
-    getDb().from('food_logs').select('*, foods(food_name, unit_type, protein)').eq('user_id', userId).gte('timestamp', start).lte('timestamp', end),
+    getDb().from('food_logs').select('*, foods(food_name, unit_type, calories, protein)').eq('user_id', userId).gte('timestamp', start).lte('timestamp', end),
     getDb().from('water_logs').select('*').eq('user_id', userId).gte('timestamp', start).lte('timestamp', end),
     getDb().from('activity_logs').select('*').eq('user_id', userId).gte('timestamp', start).lte('timestamp', end),
   ]);

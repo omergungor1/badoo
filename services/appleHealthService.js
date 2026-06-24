@@ -18,7 +18,7 @@ export async function syncTodayAppleHealthActivity(userId, date = new Date()) {
   }
 
   const logDate = toISODate(date);
-  const { error } = await upsertAppleHealthActivity({
+  const { data, error, skipped } = await upsertAppleHealthActivity({
     userId,
     logDate,
     steps: healthData.steps,
@@ -29,9 +29,18 @@ export async function syncTodayAppleHealthActivity(userId, date = new Date()) {
     return { synced: false, reason: 'db_error', error };
   }
 
+  if (skipped) {
+    return {
+      synced: false,
+      reason: 'unchanged',
+      steps: data?.steps ?? healthData.steps,
+      distanceKm: data?.distance ?? healthData.distanceKm,
+    };
+  }
+
   return {
     synced: true,
-    steps: healthData.steps,
-    distanceKm: healthData.distanceKm,
+    steps: data?.steps ?? healthData.steps,
+    distanceKm: data?.distance ?? healthData.distanceKm,
   };
 }

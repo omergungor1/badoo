@@ -1,11 +1,18 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Tabs } from 'expo-router';
 import CustomTabBar from '../../components/navigation/CustomTabBar';
 import QuickAddSheet from '../../components/navigation/QuickAddSheet';
+import StoryShareSuccessOverlay from '../../components/stories/StoryShareSuccessOverlay';
+import { subscribeStoryShared } from '../../utils/storyEvents';
 import { colors } from '../../theme';
 
 export default function TabsLayout() {
   const [showQuickAdd, setShowQuickAdd] = useState(false);
+  const [storySuccessVisible, setStorySuccessVisible] = useState(false);
+
+  useEffect(() => {
+    return subscribeStoryShared(() => setStorySuccessVisible(true));
+  }, []);
 
   return (
     <>
@@ -38,6 +45,11 @@ export default function TabsLayout() {
       </Tabs>
 
       <QuickAddSheet visible={showQuickAdd} onClose={() => setShowQuickAdd(false)} />
+
+      <StoryShareSuccessOverlay
+        visible={storySuccessVisible}
+        onClose={() => setStorySuccessVisible(false)}
+      />
     </>
   );
 }

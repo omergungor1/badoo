@@ -12,7 +12,8 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.omerexpo.badoo",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSCameraUsageDescription": "Story paylaşmak için kamera erişimine ihtiyacımız var."
       }
     },
     "android": {
@@ -50,7 +51,8 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Profil fotoğrafı seçmek için galeri erişimine ihtiyacımız var."
+          "photosPermission": "Profil fotoğrafı seçmek için galeri erişimine ihtiyacımız var.",
+          "cameraPermission": "Story paylaşmak için kamera erişimine ihtiyacımız var."
         }
       ]
     ],

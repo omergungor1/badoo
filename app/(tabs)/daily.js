@@ -21,6 +21,7 @@ import {
   toISODate,
 } from '../../utils/date';
 import { formatActivityValue } from '../../utils/activity';
+import { formatSleepLogLabel } from '../../utils/duration';
 import { formatQuantityLabel } from '../../utils/foodQuantity';
 import { buildPeriodCalendarMarkers } from '../../utils/period';
 import { colors, spacing, typography } from '../../theme';
@@ -159,10 +160,10 @@ export default function DailyScreen() {
       const timeline = timelineResult || [];
       const periodLogs = showPeriod
         ? (periodResult?.data || []).map((log) => ({
-            ...log,
-            logType: 'period',
-            sortTime: log.logged_at,
-          }))
+          ...log,
+          logType: 'period',
+          sortTime: log.logged_at,
+        }))
         : [];
 
       const merged = [...timeline, ...periodLogs].sort(
