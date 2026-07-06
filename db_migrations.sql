@@ -786,3 +786,46 @@ CREATE POLICY "stories_delete_mvp" ON storage.objects
   FOR DELETE TO anon, authenticated
   USING (bucket_id = 'stories');
 
+-- 13) Öğün fotoğrafları (food_logs genişletme, meal-photos bucket)
+ALTER TABLE badoo.food_logs ADD COLUMN IF NOT EXISTS meal_title text;
+ALTER TABLE badoo.food_logs ADD COLUMN IF NOT EXISTS image_url text;
+ALTER TABLE badoo.food_logs ADD COLUMN IF NOT EXISTS image_path text;
+ALTER TABLE badoo.food_logs ADD COLUMN IF NOT EXISTS calories integer;
+ALTER TABLE badoo.food_logs ADD COLUMN IF NOT EXISTS protein integer;
+ALTER TABLE badoo.food_logs ADD COLUMN IF NOT EXISTS carbohydrates integer;
+ALTER TABLE badoo.food_logs ADD COLUMN IF NOT EXISTS fats integer;
+
+INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+VALUES (
+  'meal-photos',
+  'meal-photos',
+  true,
+  10485760,
+  ARRAY['image/jpeg', 'image/png', 'image/webp']
+)
+ON CONFLICT (id) DO UPDATE SET
+  public = EXCLUDED.public,
+  file_size_limit = EXCLUDED.file_size_limit,
+  allowed_mime_types = EXCLUDED.allowed_mime_types;
+
+DROP POLICY IF EXISTS "meal_photos_public_read" ON storage.objects;
+CREATE POLICY "meal_photos_public_read" ON storage.objects
+  FOR SELECT TO public
+  USING (bucket_id = 'meal-photos');
+
+DROP POLICY IF EXISTS "meal_photos_insert_mvp" ON storage.objects;
+CREATE POLICY "meal_photos_insert_mvp" ON storage.objects
+  FOR INSERT TO anon, authenticated
+  WITH CHECK (bucket_id = 'meal-photos');
+
+DROP POLICY IF EXISTS "meal_photos_update_mvp" ON storage.objects;
+CREATE POLICY "meal_photos_update_mvp" ON storage.objects
+  FOR UPDATE TO anon, authenticated
+  USING (bucket_id = 'meal-photos')
+  WITH CHECK (bucket_id = 'meal-photos');
+
+DROP POLICY IF EXISTS "meal_photos_delete_mvp" ON storage.objects;
+CREATE POLICY "meal_photos_delete_mvp" ON storage.objects
+  FOR DELETE TO anon, authenticated
+  USING (bucket_id = 'meal-photos');
+

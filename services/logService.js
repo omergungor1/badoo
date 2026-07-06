@@ -1,5 +1,6 @@
 import { getDb } from '../lib/db';
 import { DAILY_TASKS } from '../constants/onboarding';
+import { GLASS_ML } from '../utils/water';
 import { endOfDay, parseISODate, startOfDay, toISODate } from '../utils/date';
 
 export async function addWaterLog({ userId, amount, timestamp }) {
@@ -12,6 +13,32 @@ export async function addWaterLog({ userId, amount, timestamp }) {
     })
     .select()
     .single();
+}
+
+export async function syncTodayWaterGlasses(userId, glasses) {
+  const start = startOfDay().toISOString();
+  const end = endOfDay().toISOString();
+
+  const { error: deleteError } = await getDb()
+    .from('water_logs')
+    .delete()
+    .eq('user_id', userId)
+    .gte('timestamp', start)
+    .lte('timestamp', end);
+
+  if (deleteError) {
+    return { data: null, error: deleteError };
+  }
+
+  if (glasses <= 0) {
+    return { data: null, error: null };
+  }
+
+  return addWaterLog({
+    userId,
+    amount: glasses * GLASS_ML,
+    timestamp: new Date().toISOString(),
+  });
 }
 
 export async function addDrinkLog({ userId, drinkName, timestamp }) {
@@ -279,7 +306,7 @@ export async function completeTask(userId, taskKey) {
 
 export async function getTimelineForDay(userId, start, end) {
   const tables = [
-    { table: 'food_logs', type: 'food', timeField: 'timestamp', select: '*, foods(food_name, unit_type)' },
+    { table: 'food_logs', type: 'food', timeField: 'timestamp', select: '*, foods(food_name, unit_type, calories, protein, carbohydrates, fats)' },
     { table: 'water_logs', type: 'water', timeField: 'timestamp' },
     { table: 'drink_logs', type: 'drink', timeField: 'timestamp' },
     { table: 'medication_logs', type: 'medication', timeField: 'timestamp', select: '*, medications(medication_name)' },
@@ -320,7 +347,7 @@ export async function getLogsForDate(userId, date) {
     getDb().from('sleep_logs').select('*').eq('user_id', userId).gte('timestamp', start).lte('timestamp', end),
     getDb().from('daily_status_logs').select('*').eq('user_id', userId).gte('timestamp', start).lte('timestamp', end),
     getDb().from('stool_logs').select('*').eq('user_id', userId).gte('time', start).lte('time', end),
-    getDb().from('food_logs').select('*, foods(food_name, unit_type, calories, protein)').eq('user_id', userId).gte('timestamp', start).lte('timestamp', end),
+    getDb().from('food_logs').select('*, foods(food_name, unit_type, calories, protein, carbohydrates, fats)').eq('user_id', userId).gte('timestamp', start).lte('timestamp', end),
     getDb().from('water_logs').select('*').eq('user_id', userId).gte('timestamp', start).lte('timestamp', end),
     getDb().from('activity_logs').select('*').eq('user_id', userId).gte('timestamp', start).lte('timestamp', end),
   ]);

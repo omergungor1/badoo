@@ -8,6 +8,7 @@ import StoryViewer from './StoryViewer';
 export default function StoryRow({
   stories,
   userName,
+  userAvatarUrl,
   isOwner = false,
   onStoriesChange,
   showLabel = false,
@@ -91,6 +92,7 @@ export default function StoryRow({
         stories={activeStories}
         initialIndex={startIndex}
         userName={userName}
+        userAvatarUrl={userAvatarUrl}
         isOwner={isOwner}
         onDeleteStory={isOwner ? handleDeleteStory : undefined}
         onClose={closeViewer}

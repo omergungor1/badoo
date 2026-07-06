@@ -14,26 +14,21 @@ import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { STORY_VIEW_DURATION_MS } from '../../constants/stories';
+import { formatStoryTime } from '../../utils/storyTime';
 import { typography } from '../../theme';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const SWIPE_CLOSE_THRESHOLD = 120;
-
-function formatStoryTime(iso) {
-  const diff = Date.now() - new Date(iso).getTime();
-  const hours = Math.floor(diff / 3600000);
-  if (hours < 1) return 'Az önce';
-  if (hours < 24) return `${hours}s`;
-  return '1g';
-}
 
 export default function StoryViewer({
   visible,
   stories,
   initialIndex = 0,
   userName,
+  userAvatarUrl,
   isOwner = false,
   onDeleteStory,
+  onStoryViewed,
   onClose,
 }) {
   const insets = useSafeAreaInsets();
@@ -105,6 +100,11 @@ export default function StoryViewer({
     startProgress();
     return stopProgress;
   }, [visible, currentIndex, story, startProgress, stopProgress]);
+
+  useEffect(() => {
+    if (!visible || !story?.id) return;
+    onStoryViewed?.(story.id);
+  }, [visible, story?.id, onStoryViewed]);
 
   const panResponder = useRef(
     PanResponder.create({
@@ -187,8 +187,19 @@ export default function StoryViewer({
           </View>
 
           <View style={styles.headerRow}>
-            <Text style={styles.userName}>{userName || 'Story'}</Text>
-            <Text style={styles.time}>{formatStoryTime(story.created_at)}</Text>
+            <View style={styles.userBlock}>
+              {userAvatarUrl ? (
+                <Image source={{ uri: userAvatarUrl }} style={styles.avatar} contentFit="cover" />
+              ) : (
+                <View style={styles.avatarPlaceholder}>
+                  <Text style={styles.avatarEmoji}>👤</Text>
+                </View>
+              )}
+              <View style={styles.nameCol}>
+                <Text style={styles.userName}>{userName || 'Story'}</Text>
+                <Text style={styles.time}>{formatStoryTime(story.created_at)}</Text>
+              </View>
+            </View>
             <View style={styles.headerSpacer} />
             {isOwner ? (
               <Pressable onPress={confirmDelete} hitSlop={12} style={styles.closeBtn}>
@@ -256,15 +267,44 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
+  userBlock: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flexShrink: 1,
+  },
+  avatar: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+  },
+  avatarPlaceholder: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarEmoji: {
+    fontSize: 16,
+  },
+  nameCol: {
+    justifyContent: 'center',
+    gap: 1,
+  },
   userName: {
     ...typography.bodySemiBold,
     color: '#fff',
     fontSize: 14,
+    lineHeight: 18,
   },
   time: {
     ...typography.caption,
     color: 'rgba(255,255,255,0.75)',
-    fontSize: 13,
+    fontSize: 12,
+    lineHeight: 14,
   },
   headerSpacer: {
     flex: 1,

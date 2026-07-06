@@ -191,7 +191,11 @@ export default function FriendProfileScreen() {
           </View>
         </View>
 
-        <StoryRow stories={stories} userName={name} />
+        <StoryRow
+          stories={stories}
+          userName={name}
+          userAvatarUrl={profile?.profile_image_thumb_url}
+        />
 
         {ringData?.rings?.length ? (
           <View style={styles.ringsWrap}>

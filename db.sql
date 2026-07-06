@@ -55,6 +55,13 @@ create table badoo.food_logs (
   user_id uuid,
   food_id uuid references badoo.foods(id) on delete cascade,
   quantity numeric,
+  meal_title text,
+  image_url text,
+  image_path text,
+  calories integer,
+  protein integer,
+  carbohydrates integer,
+  fats integer,
   timestamp timestamptz
 );
 
@@ -280,16 +287,7 @@ create table badoo.health_ai_analyses (
   created_at timestamptz default now()
 );
 
-create table badoo.stories (
-  id uuid primary key default uuid_generate_v4(),
-  user_id uuid not null,
-  image_url text not null,
-  image_path text not null,
-  expires_at timestamptz not null,
-  created_at timestamptz default now()
-);
-
-create index stories_user_active_idx on badoo.stories (user_id, expires_at desc);
+-- Öğün fotoğrafları food_logs tablosunda (image_url, image_path, meal_title, calories, ...)
 
 -- MVP Data API yetkileri (db_migrations.sql bölüm 11 ile de uygulanır)
 -- GRANT USAGE ON SCHEMA badoo TO anon, authenticated, service_role;

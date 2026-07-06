@@ -34,7 +34,6 @@ import {
 } from '../../services/friendService';
 import { getUnreadNotificationCount } from '../../services/notificationService';
 import { getActiveStories } from '../../services/storyService';
-import { subscribeStoryShared } from '../../utils/storyEvents';
 import { formatActivityValue, getActivityGoal } from '../../utils/activity';
 import { formatWaterGoal } from '../../utils/water';
 import { colors, radius, spacing, typography } from '../../theme';
@@ -144,14 +143,6 @@ export default function ProfileScreen() {
       if (user?.id) refreshProfile(user.id);
     }, [loadProfileData, refreshProfile, user?.id]),
   );
-
-  useEffect(() => {
-    return subscribeStoryShared(() => {
-      if (user?.id) {
-        getActiveStories(user.id).then(({ data }) => setStories(data || []));
-      }
-    });
-  }, [user?.id]);
 
   async function onRefresh() {
     setRefreshing(true);
@@ -321,6 +312,7 @@ export default function ProfileScreen() {
         <StoryRow
           stories={stories}
           userName={displayNickname}
+          userAvatarUrl={thumbUri}
           isOwner
           showLabel
           onStoriesChange={setStories}

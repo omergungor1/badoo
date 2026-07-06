@@ -5,23 +5,28 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import FoodSensitivityCard from '../../components/sensitivity/FoodSensitivityCard';
 import Button from '../../components/ui/Button';
 import Card from '../../components/ui/Card';
+import ScoreGrid, { ScoreGridSummary } from '../../components/ui/ScoreGrid';
+import SectionTitle from '../../components/ui/SectionTitle';
 import { useAuth } from '../../context/AuthContext';
+import { getLogsForDate } from '../../services/logService';
 import { getUserFoodSensitivityInsights } from '../../services/foodSensitivityService';
 import {
   createHealthAnalysis,
   getHealthAnalyses,
   getLatestHealthAnalysis,
 } from '../../services/healthAiAnalysisService';
-import { formatDate, formatShortDate } from '../../utils/date';
+import { formatDate, formatShortDate, getLastNDays } from '../../utils/date';
+import { calculateDailyDigestionScore } from '../../utils/digestionScore';
 import { colors, spacing, typography } from '../../theme';
 
-export default function SensitivityScreen() {
+export default function AnalysisScreen() {
   const { user } = useAuth();
   const router = useRouter();
   const [items, setItems] = useState([]);
   const [meta, setMeta] = useState({ days: 90, mealLogs: 0, symptomLogs: 0 });
   const [latestAnalysis, setLatestAnalysis] = useState(null);
   const [pastAnalyses, setPastAnalyses] = useState([]);
+  const [digestionScores, setDigestionScores] = useState([]);
   const [refreshing, setRefreshing] = useState(false);
   const [creating, setCreating] = useState(false);
 
@@ -42,6 +47,25 @@ export default function SensitivityScreen() {
     setMeta(insightMeta || { days: 90, mealLogs: 0, symptomLogs: 0 });
     setLatestAnalysis(latest || null);
     setPastAnalyses(history || []);
+
+    const days = getLastNDays(28);
+    const scoreResults = await Promise.all(
+      days.map(async (date) => {
+        const logs = await getLogsForDate(user.id, date);
+        const score = calculateDailyDigestionScore(logs);
+        const hasData =
+          logs.symptoms.length ||
+          logs.sleepLogs.length ||
+          logs.statusLogs.length ||
+          logs.stoolLogs.length ||
+          logs.foodLogs.length ||
+          logs.waterLogs.length;
+
+        return { date, score: hasData ? score : null };
+      }),
+    );
+
+    setDigestionScores(scoreResults);
   }, [user?.id]);
 
   useFocusEffect(
@@ -75,7 +99,7 @@ export default function SensitivityScreen() {
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <View style={styles.topBar}>
-        <Text style={styles.title}>Besin Hassasiyeti</Text>
+        <Text style={styles.title}>Analiz</Text>
         <Text style={styles.subtitle}>Son {meta.days} gün analizi</Text>
       </View>
 
@@ -85,6 +109,14 @@ export default function SensitivityScreen() {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
         }
       >
+        <Pressable onPress={() => router.push('/digestion-calendar')}>
+          <Card>
+            <SectionTitle title="Sindirim Takvimi" subtitle="Son 28 gün" />
+            <ScoreGrid scores={digestionScores} compact layout="weekly" />
+            <ScoreGridSummary scores={digestionScores} />
+          </Card>
+        </Pressable>
+
         <Card style={styles.aiCard}>
           <Text style={styles.aiTitle}>AI Sağlık Analizi</Text>
           <Text style={styles.aiSubtitle}>

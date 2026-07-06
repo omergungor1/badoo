@@ -54,6 +54,27 @@ export function getWeekStartMonday(date = new Date()) {
   return d;
 }
 
+export function getCurrentWeekDays(date = new Date()) {
+  const monday = getWeekStartMonday(date);
+  const days = [];
+
+  for (let index = 0; index < 7; index += 1) {
+    const current = new Date(monday);
+    current.setDate(monday.getDate() + index);
+    days.push(toISODate(current));
+  }
+
+  return days;
+}
+
+export const WEEKDAY_SHORT = ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'];
+
+export function getWeekdayShort(dateString) {
+  const date = parseISODate(dateString);
+  const index = date.getDay() === 0 ? 6 : date.getDay() - 1;
+  return WEEKDAY_SHORT[index];
+}
+
 export function getFourWeekGridRows(endDate = new Date()) {
   const today = startOfDay(endDate);
   const todayDow = today.getDay() === 0 ? 6 : today.getDay() - 1;

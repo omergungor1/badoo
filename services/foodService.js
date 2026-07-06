@@ -124,6 +124,57 @@ export async function addFoodLog({ userId, foodId, quantity, timestamp }) {
   return { data, error };
 }
 
+export async function addMealPhotoLog({
+  userId,
+  imageUrl,
+  imagePath,
+  mealTitle = 'Öğün',
+  timestamp,
+}) {
+  const { data, error } = await getDb()
+    .from('food_logs')
+    .insert({
+      user_id: userId,
+      meal_title: mealTitle,
+      image_url: imageUrl,
+      image_path: imagePath,
+      quantity: 1,
+      timestamp: timestamp || new Date().toISOString(),
+    })
+    .select('*')
+    .single();
+
+  return { data, error };
+}
+
+export async function updateMealLogNutrition(logId, {
+  mealTitle,
+  calories,
+  protein,
+  carbohydrates,
+  fats,
+}) {
+  const { data, error } = await getDb()
+    .from('food_logs')
+    .update({
+      meal_title: mealTitle?.trim() || 'Öğün',
+      calories: calories ?? null,
+      protein: protein ?? null,
+      carbohydrates: carbohydrates ?? null,
+      fats: fats ?? null,
+    })
+    .eq('id', logId)
+    .select('*')
+    .single();
+
+  return { data, error };
+}
+
+export async function deleteFoodLog(logId) {
+  const { error } = await getDb().from('food_logs').delete().eq('id', logId);
+  return { error };
+}
+
 export async function addFoodLogsBatch({ userId, items, timestamp }) {
   if (!items?.length) {
     return { data: [], error: null };
@@ -160,6 +211,14 @@ export async function getFoodLogsForDay(userId, start, end) {
 export function calculateFoodTotals(logs = []) {
   return logs.reduce(
     (acc, log) => {
+      if (log.image_url) {
+        acc.calories += log.calories || 0;
+        acc.protein += log.protein || 0;
+        acc.carbs += log.carbohydrates || 0;
+        acc.fats += log.fats || 0;
+        return acc;
+      }
+
       const food = log.foods || {};
       const factor = getNutritionFactor(log.quantity, food.unit_type);
       acc.calories += Math.round((food.calories || 0) * factor);

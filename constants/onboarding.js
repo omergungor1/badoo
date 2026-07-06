@@ -172,12 +172,12 @@ export const NUTRITION_RING_CONFIG = {
 export const WATER_AMOUNTS = [200, 300, 500, 1000];
 
 export const QUICK_ADD_ITEMS = [
-  { key: 'food', label: 'Yemek & İçecek', emoji: '🍽', route: '/add/food' },
-  { key: 'water', label: 'Su Ekle', emoji: '💧', route: '/add/water' },
-  { key: 'medication', label: 'İlaç Ekle', emoji: '💊', route: '/add/medication' },
-  { key: 'symptom', label: 'Belirti Ekle', emoji: '😖', route: '/add/symptom' },
-  { key: 'stool', label: 'Tuvalet Ekle', emoji: '🚽', route: '/add/stool' },
-  { key: 'sleep', label: 'Ara Uyku Ekle', emoji: '😴', route: '/add/sleep' },
-  { key: 'activity', label: 'Aktivite Ekle', emoji: '🚶', route: '/add/activity' },
-  { key: 'note', label: 'Not Ekle', emoji: '📝', route: '/add/note' },
+  { key: 'food', label: 'Yiyecek Listesi', icon: 'search', route: '/add/food' },
+  { key: 'water', label: 'Su Ekle', icon: 'water', route: '/add/water' },
+  { key: 'medication', label: 'İlaç Ekle', icon: 'medkit', route: '/add/medication' },
+  { key: 'symptom', label: 'Belirti Ekle', icon: 'pulse', route: '/add/symptom' },
+  { key: 'stool', label: 'Tuvalet Ekle', icon: 'stats-chart', route: '/add/stool' },
+  { key: 'sleep', label: 'Ara Uyku Ekle', icon: 'moon', route: '/add/sleep' },
+  { key: 'activity', label: 'Aktivite Ekle', icon: 'walk', route: '/add/activity' },
+  { key: 'note', label: 'Not Ekle', icon: 'document-text', route: '/add/note' },
 ];

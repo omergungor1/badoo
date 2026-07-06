@@ -14,7 +14,7 @@ function HeaderBackButton() {
 }
 
 const ADD_SCREEN_TITLES = {
-  food: 'Yemek & İçecek Ekle',
+  food: 'Yiyecek Listesi',
   water: 'Su Ekle',
   medication: 'İlaç Ekle',
   symptom: 'Belirti Ekle',

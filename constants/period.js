@@ -27,7 +27,7 @@ export function mapFallbackPeriodSymptoms() {
 export const PERIOD_QUICK_ADD_ITEM = {
   key: 'period',
   label: 'Regl',
-  emoji: '🩸',
+  icon: 'calendar',
   route: '/add/period',
   femaleOnly: true,
 };

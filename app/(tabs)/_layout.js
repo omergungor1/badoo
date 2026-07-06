@@ -2,16 +2,16 @@ import { useEffect, useState } from 'react';
 import { Tabs } from 'expo-router';
 import CustomTabBar from '../../components/navigation/CustomTabBar';
 import QuickAddSheet from '../../components/navigation/QuickAddSheet';
-import StoryShareSuccessOverlay from '../../components/stories/StoryShareSuccessOverlay';
-import { subscribeStoryShared } from '../../utils/storyEvents';
+import MealShareSuccessOverlay from '../../components/meals/MealShareSuccessOverlay';
+import { subscribeMealShared } from '../../utils/mealEvents';
 import { colors } from '../../theme';
 
 export default function TabsLayout() {
   const [showQuickAdd, setShowQuickAdd] = useState(false);
-  const [storySuccessVisible, setStorySuccessVisible] = useState(false);
+  const [mealSuccessVisible, setMealSuccessVisible] = useState(false);
 
   useEffect(() => {
-    return subscribeStoryShared(() => setStorySuccessVisible(true));
+    return subscribeMealShared(() => setMealSuccessVisible(true));
   }, []);
 
   return (
@@ -29,7 +29,8 @@ export default function TabsLayout() {
         }}
       >
         <Tabs.Screen name="index" options={{ title: 'Ana Sayfa' }} />
-        <Tabs.Screen name="daily" options={{ title: 'Günlük' }} />
+        <Tabs.Screen name="analysis" options={{ title: 'Analiz' }} />
+        <Tabs.Screen name="daily" options={{ href: null }} />
         <Tabs.Screen
           name="add"
           options={{ title: '' }}
@@ -40,15 +41,15 @@ export default function TabsLayout() {
             },
           }}
         />
-        <Tabs.Screen name="sensitivity" options={{ title: 'Besin Hassasiyeti' }} />
+        <Tabs.Screen name="social" options={{ title: 'Social' }} />
         <Tabs.Screen name="profile" options={{ title: 'Profil' }} />
       </Tabs>
 
       <QuickAddSheet visible={showQuickAdd} onClose={() => setShowQuickAdd(false)} />
 
-      <StoryShareSuccessOverlay
-        visible={storySuccessVisible}
-        onClose={() => setStorySuccessVisible(false)}
+      <MealShareSuccessOverlay
+        visible={mealSuccessVisible}
+        onClose={() => setMealSuccessVisible(false)}
       />
     </>
   );

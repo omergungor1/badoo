@@ -1,118 +1,162 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors, typography } from '../../theme';
+import { colors, radius, typography } from '../../theme';
 
-const TABS = [
-  { key: 'index', label: 'Ana Sayfa', icon: '🏠' },
-  { key: 'daily', label: 'Günlük', icon: '📖' },
-  { key: 'add', label: '', icon: '+' },
-  { key: 'sensitivity', label: 'Hassasiyet', icon: '⚠️' },
-  { key: 'profile', label: 'Profil', icon: '👤' },
-];
+const TAB_CONFIG = {
+  index: {
+    label: 'Ana Sayfa',
+    icon: 'home',
+    iconOutline: 'home-outline',
+  },
+  analysis: {
+    label: 'Analiz',
+    icon: 'bar-chart',
+    iconOutline: 'bar-chart-outline',
+  },
+  social: {
+    label: 'Sosyal',
+    icon: 'people',
+    iconOutline: 'people-outline',
+  },
+  profile: {
+    label: 'Profil',
+    icon: 'person',
+    iconOutline: 'person-outline',
+  },
+};
 
-export default function CustomTabBar({ state, descriptors, navigation, onAddPress }) {
+const LEFT_TABS = ['index', 'analysis'];
+const RIGHT_TABS = ['social', 'profile'];
+
+export default function CustomTabBar({ state, navigation, onAddPress }) {
   const insets = useSafeAreaInsets();
 
+  function renderTab(routeName) {
+    const tab = TAB_CONFIG[routeName];
+    if (!tab) return null;
+
+    const routeIndex = state.routes.findIndex((route) => route.name === routeName);
+    const isFocused = state.index === routeIndex;
+    const route = state.routes[routeIndex];
+
+    if (!route) return null;
+
+    return (
+      <Pressable
+        key={route.key}
+        onPress={() => navigation.navigate(route.name)}
+        style={styles.tab}
+      >
+        <View style={[styles.tabInner, isFocused && styles.tabInnerActive]}>
+          <Ionicons
+            name={isFocused ? tab.icon : tab.iconOutline}
+            size={22}
+            color={isFocused ? colors.textPrimary : colors.textSecondary}
+          />
+          <Text style={[styles.label, isFocused && styles.labelActive]} numberOfLines={1}>
+            {tab.label}
+          </Text>
+        </View>
+      </Pressable>
+    );
+  }
+
   return (
-    <View style={[styles.wrap, { paddingBottom: Math.max(insets.bottom, 8) }]}>
-      {state.routes.map((route, index) => {
-        const isFocused = state.index === index;
-        const tab = TABS[index];
+    <View style={[styles.outer, { paddingBottom: Math.max(insets.bottom, 12) }]}>
+      <View style={styles.pill}>
+        <View style={styles.sideGroup}>
+          {LEFT_TABS.map(renderTab)}
+        </View>
 
-        if (tab.key === 'add') {
-          return (
-            <View key={route.key} style={styles.fabWrap}>
-              <Pressable style={styles.fab} onPress={onAddPress}>
-                <View style={styles.plusIcon}>
-                  <View style={styles.plusBarH} />
-                  <View style={styles.plusBarV} />
-                </View>
-              </Pressable>
-            </View>
-          );
-        }
+        <Pressable
+          onPress={onAddPress}
+          style={({ pressed }) => [styles.fab, pressed && styles.fabPressed]}
+          accessibilityLabel="Hızlı ekle"
+          accessibilityRole="button"
+        >
+          <Ionicons name="add" size={30} color={colors.white} />
+        </Pressable>
 
-        return (
-          <Pressable
-            key={route.key}
-            onPress={() => navigation.navigate(route.name)}
-            style={styles.tab}
-          >
-            <Text style={styles.icon}>{tab.icon}</Text>
-            <Text style={[styles.label, isFocused && styles.labelActive]}>{tab.label}</Text>
-          </Pressable>
-        );
-      })}
+        <View style={styles.sideGroup}>
+          {RIGHT_TABS.map(renderTab)}
+        </View>
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  wrap: {
+  outer: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    paddingHorizontal: 20,
+    backgroundColor: 'transparent',
+  },
+  pill: {
     flexDirection: 'row',
-    alignItems: 'flex-end',
-    justifyContent: 'space-around',
-    backgroundColor: colors.white,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    paddingTop: 8,
-    minHeight: 64,
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderRadius: radius.full,
+    paddingHorizontal: 6,
+    paddingVertical: 6,
+    minHeight: 68,
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 10,
+  },
+  sideGroup: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-evenly',
   },
   tab: {
     flex: 1,
     alignItems: 'center',
-    gap: 2,
-    paddingBottom: 4,
   },
-  icon: {
-    fontSize: 20,
+  tabInner: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 3,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: radius.full,
+    minWidth: 56,
+  },
+  tabInnerActive: {
+    backgroundColor: '#EFEFEF',
   },
   label: {
     ...typography.caption,
     color: colors.textSecondary,
+    fontSize: 10,
+    lineHeight: 12,
   },
   labelActive: {
-    color: colors.primary,
+    color: colors.textPrimary,
     fontFamily: typography.bodySemiBold.fontFamily,
   },
-  fabWrap: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    paddingBottom: 4,
-    marginTop: -12,
-  },
   fab: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: colors.primary,
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    backgroundColor: colors.fab,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: colors.primaryDark,
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
+    marginHorizontal: 4,
+    shadowColor: '#000',
+    shadowOpacity: 0.18,
+    shadowRadius: 10,
     shadowOffset: { width: 0, height: 4 },
     elevation: 6,
   },
-  plusIcon: {
-    width: 28,
-    height: 28,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  plusBarH: {
-    position: 'absolute',
-    width: 26,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: colors.white,
-  },
-  plusBarV: {
-    position: 'absolute',
-    width: 4,
-    height: 26,
-    borderRadius: 2,
-    backgroundColor: colors.white,
+  fabPressed: {
+    opacity: 0.88,
+    transform: [{ scale: 0.97 }],
   },
 });
