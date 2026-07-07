@@ -8,6 +8,7 @@ export default function AppLogo({
   showSlogan = false,
   slogan,
   title = APP_NAME,
+  dark = false,
 }) {
   return (
     <View style={styles.wrap}>
@@ -16,8 +17,8 @@ export default function AppLogo({
         style={{ width: size, height: size }}
         resizeMode="contain"
       />
-      {showTitle ? <Text style={styles.title}>{title}</Text> : null}
-      {showSlogan && slogan ? <Text style={styles.slogan}>{slogan}</Text> : null}
+      {showTitle ? <Text style={[styles.title, dark && styles.titleDark]}>{title}</Text> : null}
+      {showSlogan && slogan ? <Text style={[styles.slogan, dark && styles.sloganDark]}>{slogan}</Text> : null}
     </View>
   );
 }
@@ -36,5 +37,11 @@ const styles = StyleSheet.create({
     ...typography.body,
     color: colors.textSecondary,
     textAlign: 'center',
+  },
+  titleDark: {
+    color: colors.white,
+  },
+  sloganDark: {
+    color: colors.textMuted,
   },
 });

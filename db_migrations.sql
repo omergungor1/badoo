@@ -829,3 +829,12 @@ CREATE POLICY "meal_photos_delete_mvp" ON storage.objects
   FOR DELETE TO anon, authenticated
   USING (bucket_id = 'meal-photos');
 
+-- 14) food_logs soft delete
+ALTER TABLE badoo.food_logs
+  ADD COLUMN IF NOT EXISTS deleted_at timestamptz;
+
+DROP POLICY IF EXISTS "food_logs_friends_read" ON badoo.food_logs;
+CREATE POLICY "food_logs_friends_read" ON badoo.food_logs
+  FOR SELECT TO authenticated
+  USING (badoo.are_friends(auth.uid(), user_id) AND deleted_at IS NULL);
+

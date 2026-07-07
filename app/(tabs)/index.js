@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { DAILY_TASK_RING_CONFIG, NUTRITION_RING_CONFIG } from '../../constants/onboarding';
 import { useAuth } from '../../context/AuthContext';
-import { calculateFoodTotals, getFoodLogsForDay } from '../../services/foodService';
+import { calculateFoodTotals, deleteFoodLog, getFoodLogsForDay } from '../../services/foodService';
+import { captureAndShareMeal } from '../../services/mealPhotoService';
 import { getAllDailyTasksForToday, getLogsForDate, getTimelineForDay, completeTask, syncTodayWaterGlasses } from '../../services/logService';
 import { getPeriodLogsForDate } from '../../services/periodService';
 import { PERIOD_LOG_LABELS } from '../../constants/period';
@@ -12,7 +13,9 @@ import { useAppleHealthSync } from '../../hooks/useAppleHealthSync';
 import HomeWeekCalendar from '../../components/home/HomeWeekCalendar';
 import MealNutritionModal from '../../components/meals/MealNutritionModal';
 import MealPhotoLogCard from '../../components/meals/MealPhotoLogCard';
+import MealStoryBar from '../../components/meals/MealStoryBar';
 import Card from '../../components/ui/Card';
+import SwipeToDeleteRow from '../../components/ui/SwipeToDeleteRow';
 import DailyActivityRings from '../../components/ui/DailyActivityRings';
 import ProgressRing from '../../components/ui/ProgressRing';
 import SectionTitle from '../../components/ui/SectionTitle';
@@ -39,7 +42,7 @@ import { formatSleepLogLabel } from '../../utils/duration';
 import { formatQuantityLabel } from '../../utils/foodQuantity';
 import { formatWater } from '../../utils/nutrition';
 import { consumedGlassesFromMl, GLASS_ML, goalGlassesFromMl } from '../../utils/water';
-import { subscribeMealShared } from '../../utils/mealEvents';
+import { subscribeMealShared, emitMealShared } from '../../utils/mealEvents';
 import { colors, radius, spacing, typography } from '../../theme';
 
 function clampProgress(value) {
@@ -128,7 +131,7 @@ export default function HomeScreen() {
   const [totals, setTotals] = useState({ calories: 0, protein: 0 });
   const [waterTotal, setWaterTotal] = useState(0);
   const [lastWaterLogTime, setLastWaterLogTime] = useState(null);
-  const [waterSaving, setWaterSaving] = useState(false);
+  const latestWaterSyncRef = useRef(null);
   const [activityTotals, setActivityTotals] = useState({
     steps: 0,
     distanceKm: 0,
@@ -139,6 +142,7 @@ export default function HomeScreen() {
   const [selectedDate, setSelectedDate] = useState(toISODate());
   const [editingMealLog, setEditingMealLog] = useState(null);
   const [mealModalVisible, setMealModalVisible] = useState(false);
+  const [mealUploading, setMealUploading] = useState(false);
 
   const showPeriod = profile?.gender === 'kadın';
   const waterGoal = profile?.daily_water_goal || 2000;
@@ -209,12 +213,12 @@ export default function HomeScreen() {
     [timelineItems],
   );
 
-  const loadWeekScores = useCallback(async () => {
+  const loadWeekScores = useCallback(async (weekDays) => {
     if (!user?.id) return;
 
-    const weekDays = getCurrentWeekDays();
+    const days = weekDays || getCurrentWeekDays();
     const results = await Promise.all(
-      weekDays.map(async (date) => {
+      days.map(async (date) => {
         const dayStart = startOfDay(parseISODate(date)).toISOString();
         const dayEnd = endOfDay(parseISODate(date)).toISOString();
         const [timeline, logs] = await Promise.all([
@@ -233,8 +237,12 @@ export default function HomeScreen() {
       }),
     );
 
-    setDayScores(Object.fromEntries(results));
+    setDayScores((prev) => ({ ...prev, ...Object.fromEntries(results) }));
   }, [user?.id]);
+
+  const handleWeekChange = useCallback((weekDays) => {
+    loadWeekScores(weekDays);
+  }, [loadWeekScores]);
 
   const loadTimeline = useCallback(
     async (date) => {
@@ -371,30 +379,70 @@ export default function HomeScreen() {
   }
 
   async function handleWaterGlassesPress(glasses) {
-    if (!user?.id || waterSaving || !viewingToday) return;
+    if (!user?.id || !viewingToday) return;
 
     const targetMl = glasses * GLASS_ML;
     if (waterTotal === targetMl) return;
 
-    setWaterSaving(true);
+    const previousSnapshot = {
+      total: waterTotal,
+      lastLogTime: lastWaterLogTime,
+    };
+
+    latestWaterSyncRef.current = glasses;
+    setWaterTotal(targetMl);
+    setLastWaterLogTime(glasses > 0 ? new Date().toISOString() : null);
+
     const { error } = await syncTodayWaterGlasses(user.id, glasses);
-    setWaterSaving(false);
+
+    if (latestWaterSyncRef.current !== glasses) {
+      return;
+    }
+
+    latestWaterSyncRef.current = null;
 
     if (error) {
+      setWaterTotal(previousSnapshot.total);
+      setLastWaterLogTime(previousSnapshot.lastLogTime);
       Alert.alert('Hata', error.message);
       return;
     }
 
     if (glasses > 0) {
-      await completeTask(user.id, 'water');
+      completeTask(user.id, 'water').then(({ data: taskData }) => {
+        if (taskData) {
+          setAllTasks((prev) => prev.map((task) => (
+            task.task_key === 'water' ? { ...task, completed: true } : task
+          )));
+        }
+      });
     }
 
-    await loadData();
+    loadTimeline(selectedDate);
   }
 
   function handleMealPress(item) {
     setEditingMealLog(item);
     setMealModalVisible(true);
+  }
+
+  async function handleAddMealPhoto() {
+    if (!user?.id || mealUploading || !viewingToday) return;
+
+    setMealUploading(true);
+    const { data, error } = await captureAndShareMeal(user.id);
+    setMealUploading(false);
+
+    if (error) {
+      Alert.alert('Hata', error.message || 'Öğün fotoğrafı yüklenemedi.');
+      return;
+    }
+
+    if (data) {
+      await completeTask(user.id, 'meals');
+      emitMealShared(data);
+      await loadData();
+    }
   }
 
   function handleMealModalClose() {
@@ -404,6 +452,31 @@ export default function HomeScreen() {
 
   async function handleMealSaved() {
     await loadData();
+  }
+
+  function handleFoodDelete(item) {
+    Alert.alert(
+      'Öğünü sil',
+      'Bu öğünü silmek istediğinizden emin misiniz?',
+      [
+        { text: 'Vazgeç', style: 'cancel' },
+        {
+          text: 'Sil',
+          style: 'destructive',
+          onPress: async () => {
+            if (!user?.id) return;
+
+            const { error } = await deleteFoodLog(item.id, user.id);
+            if (error) {
+              Alert.alert('Hata', error.message);
+              return;
+            }
+
+            await loadData();
+          },
+        },
+      ],
+    );
   }
 
   const taskMetrics = {
@@ -425,9 +498,20 @@ export default function HomeScreen() {
           selectedDate={selectedDate}
           dayScores={dayScores}
           onSelectDate={handleSelectDate}
+          onWeekChange={handleWeekChange}
         />
 
         <DailyActivityRings rings={nutritionRings} />
+
+        {viewingToday || mealPhotoItems.length ? (
+          <MealStoryBar
+            meals={mealPhotoItems}
+            onAddMeal={handleAddMealPhoto}
+            onMealPress={handleMealPress}
+            showAddButton={viewingToday}
+            uploading={mealUploading}
+          />
+        ) : null}
 
         <Card>
           <WaterTracking
@@ -437,7 +521,7 @@ export default function HomeScreen() {
             goalGlasses={waterGoalGlasses}
             lastLogTime={lastWaterLogTime}
             onSelectGlasses={handleWaterGlassesPress}
-            saving={waterSaving || !viewingToday}
+            saving={!viewingToday}
           />
         </Card>
 
@@ -490,22 +574,45 @@ export default function HomeScreen() {
         {mealPhotoItems.length ? (
           <View style={styles.timelineList}>
             {mealPhotoItems.map((item) => (
-              <MealPhotoLogCard
+              <SwipeToDeleteRow
                 key={`meal-${item.id}`}
-                item={item}
-                onPress={handleMealPress}
-              />
+                onDelete={() => handleFoodDelete(item)}
+              >
+                <MealPhotoLogCard
+                  item={item}
+                  onPress={handleMealPress}
+                />
+              </SwipeToDeleteRow>
             ))}
           </View>
         ) : null}
 
         <View style={styles.timelineList}>
-          {otherTimelineItems.map((item) => (
-            <Card key={`${item.logType}-${item.id}`} style={styles.timelineItem}>
-              <Text style={styles.timelineTime}>{formatTime(item.sortTime)}</Text>
-              <Text style={styles.timelineLabel}>{getTimelineLabel(item)}</Text>
-            </Card>
-          ))}
+          {otherTimelineItems.map((item) => {
+            const card = (
+              <Card style={styles.timelineItem}>
+                <Text style={styles.timelineTime}>{formatTime(item.sortTime)}</Text>
+                <Text style={styles.timelineLabel}>{getTimelineLabel(item)}</Text>
+              </Card>
+            );
+
+            if (item.logType === 'food') {
+              return (
+                <SwipeToDeleteRow
+                  key={`${item.logType}-${item.id}`}
+                  onDelete={() => handleFoodDelete(item)}
+                >
+                  {card}
+                </SwipeToDeleteRow>
+              );
+            }
+
+            return (
+              <View key={`${item.logType}-${item.id}`}>
+                {card}
+              </View>
+            );
+          })}
 
           {!otherTimelineItems.length && !mealPhotoItems.length ? (
             <Card variant="light">

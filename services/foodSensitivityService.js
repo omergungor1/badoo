@@ -34,6 +34,7 @@ export async function getUserFoodSensitivityInsights(userId) {
         .from('food_logs')
         .select('id, timestamp, foods(food_name)')
         .eq('user_id', userId)
+        .is('deleted_at', null)
         .gte('timestamp', startIso)
         .lte('timestamp', endIso),
       getDb()

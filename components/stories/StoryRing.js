@@ -10,6 +10,7 @@ const VIEWED_RING_COLOR = '#c7c7cc';
 
 export default function StoryRing({
   imageUrl,
+  localSource,
   size = 64,
   onPress,
   ringId = '0',
@@ -19,9 +20,10 @@ export default function StoryRing({
   const innerSize = size - (RING_WIDTH + GAP) * 2;
   const radius = size / 2 - RING_WIDTH / 2;
   const gradId = `storyRingGrad-${ringId}`;
+  const imageSource = localSource || (imageUrl ? { uri: imageUrl } : null);
 
   return (
-    <Pressable onPress={onPress} style={styles.wrap}>
+    <Pressable onPress={onPress} disabled={!onPress} style={styles.wrap}>
       <View style={{ width: size, height: size }}>
         {viewed ? (
           <View
@@ -71,7 +73,13 @@ export default function StoryRing({
             },
           ]}
         >
-          <Image source={{ uri: imageUrl }} style={styles.image} contentFit="cover" />
+          {imageSource ? (
+            <Image
+              source={imageSource}
+              style={styles.image}
+              contentFit={localSource ? 'contain' : 'cover'}
+            />
+          ) : null}
         </View>
       </View>
       {label ? (

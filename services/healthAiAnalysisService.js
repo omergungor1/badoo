@@ -63,6 +63,7 @@ async function gatherAnalysisData(userId, period) {
       .from('food_logs')
       .select('*, foods(food_name, unit_type, calories, protein)')
       .eq('user_id', userId)
+      .is('deleted_at', null)
       .gte('timestamp', period.startIso)
       .lte('timestamp', period.endIso),
     getDb()

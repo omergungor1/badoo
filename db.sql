@@ -62,7 +62,8 @@ create table badoo.food_logs (
   protein integer,
   carbohydrates integer,
   fats integer,
-  timestamp timestamptz
+  timestamp timestamptz,
+  deleted_at timestamptz
 );
 
 create table badoo.water_logs (

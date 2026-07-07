@@ -67,6 +67,19 @@ export function getCurrentWeekDays(date = new Date()) {
   return days;
 }
 
+export function getWeekPages(weeksBack = 52, endDate = new Date()) {
+  const currentMonday = getWeekStartMonday(endDate);
+  const pages = [];
+
+  for (let offset = weeksBack; offset >= 0; offset -= 1) {
+    const monday = new Date(currentMonday);
+    monday.setDate(currentMonday.getDate() - offset * 7);
+    pages.push(getCurrentWeekDays(monday));
+  }
+
+  return pages;
+}
+
 export const WEEKDAY_SHORT = ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'];
 
 export function getWeekdayShort(dateString) {

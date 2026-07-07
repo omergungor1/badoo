@@ -320,12 +320,18 @@ export async function getTimelineForDay(userId, start, end) {
 
   const results = await Promise.all(
     tables.map(async ({ table, type, timeField, select }) => {
-      const { data } = await getDb()
+      let request = getDb()
         .from(table)
         .select(select || '*')
         .eq('user_id', userId)
         .gte(timeField, start)
         .lte(timeField, end);
+
+      if (table === 'food_logs') {
+        request = request.is('deleted_at', null);
+      }
+
+      const { data } = await request;
 
       return (data || []).map((item) => ({
         ...item,
@@ -347,7 +353,7 @@ export async function getLogsForDate(userId, date) {
     getDb().from('sleep_logs').select('*').eq('user_id', userId).gte('timestamp', start).lte('timestamp', end),
     getDb().from('daily_status_logs').select('*').eq('user_id', userId).gte('timestamp', start).lte('timestamp', end),
     getDb().from('stool_logs').select('*').eq('user_id', userId).gte('time', start).lte('time', end),
-    getDb().from('food_logs').select('*, foods(food_name, unit_type, calories, protein, carbohydrates, fats)').eq('user_id', userId).gte('timestamp', start).lte('timestamp', end),
+    getDb().from('food_logs').select('*, foods(food_name, unit_type, calories, protein, carbohydrates, fats)').eq('user_id', userId).is('deleted_at', null).gte('timestamp', start).lte('timestamp', end),
     getDb().from('water_logs').select('*').eq('user_id', userId).gte('timestamp', start).lte('timestamp', end),
     getDb().from('activity_logs').select('*').eq('user_id', userId).gte('timestamp', start).lte('timestamp', end),
   ]);
@@ -365,7 +371,7 @@ export async function getLogsForDate(userId, date) {
 
 export async function getWeeklyStats(userId, start, end) {
   const [foodLogs, waterLogs, activityLogs, symptomLogs, sleepLogs] = await Promise.all([
-    getDb().from('food_logs').select('*, foods(unit_type, calories, protein)').eq('user_id', userId).gte('timestamp', start).lte('timestamp', end),
+    getDb().from('food_logs').select('*, foods(unit_type, calories, protein)').eq('user_id', userId).is('deleted_at', null).gte('timestamp', start).lte('timestamp', end),
     getDb().from('water_logs').select('*').eq('user_id', userId).gte('timestamp', start).lte('timestamp', end),
     getDb().from('activity_logs').select('*').eq('user_id', userId).gte('timestamp', start).lte('timestamp', end),
     getDb().from('symptom_logs').select('*').eq('user_id', userId).gte('timestamp', start).lte('timestamp', end),

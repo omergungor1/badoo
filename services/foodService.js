@@ -164,14 +164,21 @@ export async function updateMealLogNutrition(logId, {
       fats: fats ?? null,
     })
     .eq('id', logId)
+    .is('deleted_at', null)
     .select('*')
     .single();
 
   return { data, error };
 }
 
-export async function deleteFoodLog(logId) {
-  const { error } = await getDb().from('food_logs').delete().eq('id', logId);
+export async function deleteFoodLog(logId, userId) {
+  const { error } = await getDb()
+    .from('food_logs')
+    .update({ deleted_at: new Date().toISOString() })
+    .eq('id', logId)
+    .eq('user_id', userId)
+    .is('deleted_at', null);
+
   return { error };
 }
 
@@ -201,6 +208,7 @@ export async function getFoodLogsForDay(userId, start, end) {
     .from('food_logs')
     .select('*, foods(food_name, unit_type, calories, protein, carbohydrates, fats)')
     .eq('user_id', userId)
+    .is('deleted_at', null)
     .gte('timestamp', start)
     .lte('timestamp', end)
     .order('timestamp', { ascending: false });
