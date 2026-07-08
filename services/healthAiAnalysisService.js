@@ -159,7 +159,7 @@ async function gatherAnalysisData(userId, period) {
   return { payload, profile, dataPointCount };
 }
 
-async function requestOpenAiAnalysis(payload) {
+async function requestOpenAiAnalysis(payload, userNote) {
   const apiKey = getOpenAiApiKey();
   if (!apiKey) {
     return { data: null, error: { message: 'OPENAI_API_KEY tanımlı değil.' } };
@@ -183,7 +183,7 @@ async function requestOpenAiAnalysis(payload) {
         },
         {
           role: 'user',
-          content: buildAnalysisPrompt(payload),
+          content: buildAnalysisPrompt(payload, userNote),
         },
       ],
     }),
@@ -252,7 +252,30 @@ export async function getLatestHealthAnalysis(userId) {
   return { data, error };
 }
 
-export async function createHealthAnalysis(userId) {
+export async function getHealthAnalysisPreview(userId) {
+  const period = getAnalysisPeriod();
+  const { payload, dataPointCount } = await gatherAnalysisData(userId, period);
+
+  return {
+    data: {
+      period,
+      dataPointCount,
+      stats: {
+        meals: payload.nutrition?.meals?.length || 0,
+        symptoms: payload.symptoms?.length || 0,
+        sleep: payload.sleep?.length || 0,
+        activities: payload.activities?.length || 0,
+        stool: payload.stool?.length || 0,
+        checkins: payload.dailyCheckins?.length || 0,
+        water: payload.hydration?.length || 0,
+      },
+    },
+    error: null,
+  };
+}
+
+export async function createHealthAnalysis(userId, options = {}) {
+  const userNote = options.userNote?.trim() || '';
   const period = getAnalysisPeriod();
   const { payload, dataPointCount } = await gatherAnalysisData(userId, period);
 
@@ -265,12 +288,13 @@ export async function createHealthAnalysis(userId) {
     };
   }
 
-  const aiResult = await requestOpenAiAnalysis(payload);
+  const aiResult = await requestOpenAiAnalysis(payload, userNote);
   if (aiResult.error) {
     return { data: null, error: aiResult.error };
   }
 
   const { title, summary, analysisText } = aiResult.data;
+  const snapshot = userNote ? { ...payload, userQuestion: userNote } : payload;
 
   const { data, error } = await getDb()
     .from('health_ai_analyses')
@@ -279,7 +303,7 @@ export async function createHealthAnalysis(userId) {
       title,
       summary,
       analysis_text: analysisText,
-      input_snapshot: payload,
+      input_snapshot: snapshot,
       period_start: period.startDate,
       period_end: period.endDate,
       model: AI_MODEL,

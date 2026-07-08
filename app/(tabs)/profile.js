@@ -1,74 +1,55 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import {
   Alert,
-  Pressable,
+  Platform,
   RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import ProfileAvatar from '../../components/profile/ProfileAvatar';
-import ProfileImageViewer from '../../components/profile/ProfileImageViewer';
-import StoryRow from '../../components/stories/StoryRow';
-import Button from '../../components/ui/Button';
+import ProfileInviteCard from '../../components/profile/ProfileInviteCard';
+import ProfileSection, { profilePageColors } from '../../components/profile/ProfileSection';
+import ProfileSettingRow from '../../components/profile/ProfileSettingRow';
+import ProfileUserCard from '../../components/profile/ProfileUserCard';
+import ProfileWidgetsSection from '../../components/profile/ProfileWidgetsSection';
+import Toast from '../../components/ui/Toast';
 import { useAuth } from '../../context/AuthContext';
-import {
-  deleteProfileImage,
-  pickProfileImage,
-  uploadProfileImage,
-} from '../../services/profileImageService';
+import { isAppleHealthSupported, requestAppleHealthPermissions } from '../../lib/appleHealth';
 import {
   getConditions,
   getGoals,
   getMedications,
   getSensitivities,
-  updateProfile,
 } from '../../services/profileService';
 import {
   getFriends,
   getIncomingFriendRequests,
 } from '../../services/friendService';
 import { getUnreadNotificationCount } from '../../services/notificationService';
-import { getActiveStories } from '../../services/storyService';
-import { formatActivityValue, getActivityGoal } from '../../utils/activity';
-import { formatWaterGoal } from '../../utils/water';
-import { colors, radius, spacing, typography } from '../../theme';
+import { colors, spacing, typography } from '../../theme';
 
-const BIO_MAX = 150;
-const NICKNAME_MAX = 30;
-
-function StatItem({ value, label }) {
-  return (
-    <View style={styles.statItem}>
-      <Text style={styles.statValue}>{value}</Text>
-      <Text style={styles.statLabel}>{label}</Text>
-    </View>
-  );
-}
-
-function ProfileMenuRow({ title, count, onPress }) {
-  return (
-    <Pressable
-      onPress={onPress}
-      style={({ pressed }) => [styles.menuRow, pressed && styles.menuRowPressed]}
-    >
-      <Text style={styles.menuTitle}>{title}</Text>
-      <View style={styles.menuRight}>
-        {count != null ? <Text style={styles.menuCount}>{count}</Text> : null}
-        <Text style={styles.menuChevron}>›</Text>
-      </View>
-    </Pressable>
-  );
-}
+const COMING_SOON_MESSAGE = 'Bu özellik daha sonra eklenecektir.';
 
 function defaultNickname(profile, user) {
   if (profile?.nickname?.trim()) return profile.nickname.trim();
   const emailPrefix = user?.email?.split('@')[0];
   return emailPrefix || 'kullanici';
+}
+
+function buildHandle(nickname) {
+  const slug = nickname
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '')
+    .slice(0, 24);
+  return `@${slug || 'kullanici'}`;
+}
+
+function formatSyncTime(date) {
+  if (!date) return 'Henüz senkronize edilmedi';
+  return date.toLocaleTimeString('tr-TR', { hour: 'numeric', minute: '2-digit' });
 }
 
 export default function ProfileScreen() {
@@ -82,41 +63,21 @@ export default function ProfileScreen() {
   const [requestCount, setRequestCount] = useState(0);
   const [notificationCount, setNotificationCount] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
-  const [nickname, setNickname] = useState('');
-  const [bio, setBio] = useState('');
-  const [savingText, setSavingText] = useState(false);
-  const [uploadingPhoto, setUploadingPhoto] = useState(false);
-  const [localThumbUri, setLocalThumbUri] = useState(null);
-  const [viewerOpen, setViewerOpen] = useState(false);
-  const [stories, setStories] = useState([]);
-  const [openStoryAt, setOpenStoryAt] = useState(null);
+  const [lastSyncedAt, setLastSyncedAt] = useState(null);
+  const [appleHealthConnected, setAppleHealthConnected] = useState(false);
+  const [toastMessage, setToastMessage] = useState(null);
 
   const displayNickname = defaultNickname(profile, user);
+  const displayHandle = buildHandle(displayNickname);
+  const thumbUri = profile?.profile_image_thumb_url || null;
 
-  useEffect(() => {
-    setNickname(profile?.nickname || '');
-    setBio(profile?.bio || '');
-    setLocalThumbUri(null);
-  }, [profile?.nickname, profile?.bio, profile?.profile_image_thumb_url]);
-
-  const profileDirty = useMemo(() => {
-    const currentNickname = profile?.nickname || '';
-    const currentBio = profile?.bio || '';
-    return nickname.trim() !== currentNickname || bio.trim() !== currentBio;
-  }, [nickname, bio, profile?.nickname, profile?.bio]);
-
-  const activityGoalLabel = useMemo(() => {
-    const goal = getActivityGoal(profile);
-    return formatActivityValue(goal.value, goal.type);
-  }, [profile]);
-
-  const thumbUri = localThumbUri || profile?.profile_image_thumb_url || null;
-  const originalUri = profile?.profile_image_url || null;
+  const hideToast = useCallback(() => setToastMessage(null), []);
+  const showComingSoon = useCallback(() => setToastMessage(COMING_SOON_MESSAGE), []);
 
   const loadProfileData = useCallback(async () => {
     if (!user?.id) return;
 
-    const [g, c, s, m, friends, requests, notifications, activeStories] = await Promise.all([
+    const [g, c, s, m, friends, requests, notifications] = await Promise.all([
       getGoals(user.id),
       getConditions(user.id),
       getSensitivities(user.id),
@@ -124,7 +85,6 @@ export default function ProfileScreen() {
       getFriends(user.id),
       getIncomingFriendRequests(user.id),
       getUnreadNotificationCount(user.id),
-      getActiveStories(user.id),
     ]);
 
     setGoals(g.data || []);
@@ -134,13 +94,14 @@ export default function ProfileScreen() {
     setFriendCount(friends.data?.length || 0);
     setRequestCount(requests.data?.length || 0);
     setNotificationCount(notifications.count || 0);
-    setStories(activeStories.data || []);
+    setLastSyncedAt(new Date());
   }, [user?.id]);
 
   useFocusEffect(
     useCallback(() => {
       loadProfileData();
       if (user?.id) refreshProfile(user.id);
+      setAppleHealthConnected(isAppleHealthSupported());
     }, [loadProfileData, refreshProfile, user?.id]),
   );
 
@@ -150,115 +111,22 @@ export default function ProfileScreen() {
     setRefreshing(false);
   }
 
-  async function handleSaveText() {
-    if (!user?.id) return;
-
-    const trimmedNickname = nickname.trim();
-    const trimmedBio = bio.trim();
-
-    if (!trimmedNickname) {
-      Alert.alert('Hata', 'Kullanıcı adı boş olamaz.');
+  const handleAppleHealthPress = useCallback(async () => {
+    if (Platform.OS !== 'ios' || !isAppleHealthSupported()) {
+      showComingSoon();
       return;
     }
 
-    if (trimmedNickname.length > NICKNAME_MAX) {
-      Alert.alert('Hata', `Kullanıcı adı en fazla ${NICKNAME_MAX} karakter olabilir.`);
+    const result = await requestAppleHealthPermissions();
+    setAppleHealthConnected(result.granted || isAppleHealthSupported());
+
+    if (!result.granted) {
+      setToastMessage('Apple Health bağlantısı kurulamadı.');
       return;
     }
 
-    if (trimmedBio.length > BIO_MAX) {
-      Alert.alert('Hata', `Biyografi en fazla ${BIO_MAX} karakter olabilir.`);
-      return;
-    }
-
-    setSavingText(true);
-    const { error } = await updateProfile(user.id, {
-      nickname: trimmedNickname,
-      bio: trimmedBio,
-    });
-    setSavingText(false);
-
-    if (error) {
-      Alert.alert('Hata', error.message);
-      return;
-    }
-
-    await refreshProfile(user.id);
-  }
-
-  async function handleUploadPhoto() {
-    if (!user?.id || uploadingPhoto) return;
-
-    const { uri, error: pickError } = await pickProfileImage();
-    if (pickError) {
-      Alert.alert('Hata', pickError.message);
-      return;
-    }
-    if (!uri) return;
-
-    setUploadingPhoto(true);
-    setLocalThumbUri(uri);
-
-    const { previewUri, error } = await uploadProfileImage(user.id, uri);
-    setUploadingPhoto(false);
-
-    if (error) {
-      setLocalThumbUri(null);
-      Alert.alert('Hata', error.message);
-      return;
-    }
-
-    setLocalThumbUri(previewUri || uri);
-    await refreshProfile(user.id);
-  }
-
-  async function handleDeletePhoto() {
-    if (!user?.id || uploadingPhoto) return;
-
-    setUploadingPhoto(true);
-    const { error } = await deleteProfileImage(user.id);
-    setUploadingPhoto(false);
-
-    if (error) {
-      Alert.alert('Hata', error.message);
-      return;
-    }
-
-    setLocalThumbUri(null);
-    setViewerOpen(false);
-    await refreshProfile(user.id);
-  }
-
-  function confirmDeletePhoto() {
-    Alert.alert(
-      'Profil fotoğrafını sil',
-      'Profil fotoğrafını kaldırmak istediğinize emin misiniz?',
-      [
-        { text: 'İptal', style: 'cancel' },
-        { text: 'Sil', style: 'destructive', onPress: handleDeletePhoto },
-      ],
-    );
-  }
-
-  function handleAvatarPress() {
-    if (stories.length) {
-      setOpenStoryAt(0);
-      return;
-    }
-    if (originalUri) {
-      setViewerOpen(true);
-      return;
-    }
-    handleUploadPhoto();
-  }
-
-  function handleAvatarLongPress() {
-    if (originalUri) {
-      setViewerOpen(true);
-      return;
-    }
-    handleUploadPhoto();
-  }
+    setToastMessage('Apple Health bağlandı.');
+  }, [showComingSoon]);
 
   function handleSignOut() {
     Alert.alert(
@@ -278,6 +146,94 @@ export default function ProfileScreen() {
     );
   }
 
+  const accountRows = useMemo(
+    () => [
+      { key: 'personal', icon: 'card-outline', title: 'Kişisel Bilgiler', onPress: () => router.push('/edit-profile') },
+      { key: 'notifications', icon: 'notifications-outline', title: 'Bildirimler', onPress: () => router.push('/notifications'), rightText: notificationCount > 0 ? String(notificationCount) : null },
+      { key: 'preferences', icon: 'options-outline', title: 'Tercihler', onPress: showComingSoon },
+      { key: 'language', icon: 'language-outline', title: 'Dil', onPress: showComingSoon },
+    ],
+    [notificationCount, router, showComingSoon],
+  );
+
+  const goalsRows = useMemo(
+    () => [
+      {
+        key: 'apple-health',
+        icon: 'heart-outline',
+        title: 'Apple Health',
+        onPress: handleAppleHealthPress,
+        rightText: appleHealthConnected ? 'Bağlı' : null,
+        rightIcon: appleHealthConnected ? 'checkmark-circle' : null,
+        showChevron: !appleHealthConnected,
+      },
+      { key: 'nutrition', icon: 'nutrition-outline', title: 'Beslenme Hedefleri', onPress: () => router.push('/edit-profile') },
+      { key: 'goals', icon: 'flag-outline', title: 'Hedefler ve güncel kilo', onPress: () => router.push('/goals'), rightText: goals.length > 0 ? String(goals.length) : null },
+      { key: 'reminders', icon: 'alarm-outline', title: 'Takip Hatırlatıcıları', onPress: showComingSoon },
+      { key: 'stats', icon: 'stats-chart-outline', title: 'İstatistikler', onPress: () => router.push('/stats') },
+      { key: 'weight-history', icon: 'time-outline', title: 'Kilo Geçmişi', onPress: showComingSoon },
+      { key: 'rings', icon: 'ellipse-outline', title: 'Aktivite Halkaları', onPress: showComingSoon },
+      { key: 'foods', icon: 'restaurant-outline', title: 'Yemek & İçecek Listesi', onPress: () => router.push('/foods') },
+      { key: 'conditions', icon: 'medkit-outline', title: 'Hastalıklar', onPress: () => router.push('/conditions'), rightText: conditions.length > 0 ? String(conditions.length) : null },
+      { key: 'medications', icon: 'medical-outline', title: 'İlaçlar', onPress: () => router.push('/medications'), rightText: medications.length > 0 ? String(medications.length) : null },
+      { key: 'sensitivities', icon: 'leaf-outline', title: 'Besin Hassasiyetleri', onPress: () => router.push('/sensitivities'), rightText: sensitivities.length > 0 ? String(sensitivities.length) : null },
+    ],
+    [
+      appleHealthConnected,
+      conditions.length,
+      goals.length,
+      handleAppleHealthPress,
+      medications.length,
+      router,
+      sensitivities.length,
+      showComingSoon,
+    ],
+  );
+
+  const socialRows = useMemo(
+    () => [
+      { key: 'friends', icon: 'people-outline', title: 'Arkadaşlarım', onPress: () => router.push('/friends'), rightText: friendCount > 0 ? String(friendCount) : null },
+      { key: 'requests', icon: 'mail-unread-outline', title: 'Gelen İstekler', onPress: () => router.push('/friends/requests'), rightText: requestCount > 0 ? String(requestCount) : null },
+    ],
+    [friendCount, requestCount, router],
+  );
+
+  const supportRows = useMemo(
+    () => [
+      { key: 'feature', icon: 'megaphone-outline', title: 'Özellik Öner', onPress: showComingSoon },
+      { key: 'support', icon: 'mail-outline', title: 'Destek E-postası', onPress: showComingSoon },
+      { key: 'export', icon: 'document-text-outline', title: 'PDF Özet Raporu', onPress: showComingSoon },
+      { key: 'sync', icon: 'refresh-outline', title: 'Veri Senkronizasyonu', onPress: onRefresh, rightText: `Son: ${formatSyncTime(lastSyncedAt)}` },
+      { key: 'terms', icon: 'document-outline', title: 'Kullanım Şartları', onPress: showComingSoon },
+      { key: 'privacy', icon: 'shield-checkmark-outline', title: 'Gizlilik Politikası', onPress: showComingSoon },
+    ],
+    [lastSyncedAt, showComingSoon],
+  );
+
+  const followRows = useMemo(
+    () => [
+      { key: 'instagram', icon: 'logo-instagram', title: 'Instagram', onPress: showComingSoon },
+      { key: 'tiktok', icon: 'logo-tiktok', title: 'TikTok', onPress: showComingSoon },
+      { key: 'x', icon: 'logo-twitter', title: 'X', onPress: showComingSoon },
+    ],
+    [showComingSoon],
+  );
+
+  function renderRows(rows) {
+    return rows.map((row, index) => (
+      <ProfileSettingRow
+        key={row.key}
+        icon={row.icon}
+        title={row.title}
+        onPress={row.onPress}
+        rightText={row.rightText}
+        rightIcon={row.rightIcon}
+        showChevron={row.showChevron ?? true}
+        isLast={index === rows.length - 1}
+      />
+    ));
+  }
+
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <ScrollView
@@ -286,281 +242,105 @@ export default function ProfileScreen() {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
         }
       >
-        <View style={styles.topBar}>
-          <Text style={styles.topUsername}>{displayNickname}</Text>
-          <Pressable onPress={() => router.push('/edit-profile')} hitSlop={8}>
-            <Text style={styles.settingsIcon}>⚙️</Text>
-          </Pressable>
-        </View>
+        <Text style={styles.pageTitle}>Profil</Text>
 
-        <View style={styles.profileRow}>
-          <ProfileAvatar
-            thumbUri={thumbUri}
-            uploading={uploadingPhoto}
-            onPress={handleAvatarPress}
-            onLongPress={handleAvatarLongPress}
-            storyRingActive={stories.length > 0}
-          />
-
-          <View style={styles.statsRow}>
-            <StatItem value={goals.length} label="Hedef" />
-            <StatItem value={conditions.length} label="Hastalık" />
-            <StatItem value={medications.length} label="İlaç" />
-          </View>
-        </View>
-
-        <StoryRow
-          stories={stories}
-          userName={displayNickname}
-          userAvatarUrl={thumbUri}
-          isOwner
-          showLabel
-          onStoriesChange={setStories}
-          openAtIndex={openStoryAt}
-          onViewerClosed={() => setOpenStoryAt(null)}
+        <ProfileUserCard
+          name={displayNickname}
+          handle={displayHandle}
+          avatarUrl={thumbUri}
+          onPress={() => router.push('/edit-profile')}
         />
 
-        <View style={styles.identityBlock}>
-          <TextInput
-            value={nickname}
-            onChangeText={setNickname}
-            placeholder="Kullanıcı adı"
-            placeholderTextColor={colors.textSecondary}
-            maxLength={NICKNAME_MAX}
-            autoCapitalize="none"
-            autoCorrect={false}
-            style={styles.nicknameInput}
-          />
-
-          <TextInput
-            value={bio}
-            onChangeText={setBio}
-            placeholder="Biyografi yaz..."
-            placeholderTextColor={colors.textSecondary}
-            maxLength={BIO_MAX}
-            multiline
-            style={styles.bioInput}
-          />
-          <Text style={styles.bioCount}>{bio.length}/{BIO_MAX}</Text>
-
-          {profileDirty ? (
-            <Pressable
-              onPress={handleSaveText}
-              disabled={savingText}
-              style={({ pressed }) => [styles.saveTextBtn, pressed && styles.saveTextBtnPressed]}
-            >
-              <Text style={styles.saveTextLabel}>{savingText ? 'Kaydediliyor...' : 'Kaydet'}</Text>
-            </Pressable>
-          ) : null}
-
-          <Text style={styles.email}>{user?.email}</Text>
+        <View style={styles.block}>
+          <Text style={styles.sectionTitle}>Arkadaş Davet</Text>
+          <ProfileInviteCard onPress={() => router.push('/friends/add')} />
         </View>
 
-        <Pressable
-          onPress={() => router.push('/edit-profile')}
-          style={({ pressed }) => [styles.editProfileBtn, pressed && styles.editProfileBtnPressed]}
-        >
-          <Text style={styles.editProfileText}>Profili Düzenle</Text>
-        </Pressable>
-
-        <View style={styles.metaCard}>
-          <Text style={styles.metaLine}>
-            {profile?.height || '-'} cm · {profile?.weight || '-'} kg · {profile?.birth_year || '-'}
-          </Text>
-          <Text style={styles.metaLine}>
-            {profile?.daily_calorie_goal || '-'} kcal · {profile?.daily_protein_goal || '-'} g protein · {formatWaterGoal(profile?.daily_water_goal)} · {activityGoalLabel} aktivite
-          </Text>
+        <View style={styles.block}>
+          <ProfileSection title="Sosyal">
+            {renderRows(socialRows)}
+          </ProfileSection>
         </View>
 
-        <View style={styles.menuSection}>
-          <ProfileMenuRow title="Bildirimler" count={notificationCount} onPress={() => router.push('/notifications')} />
-          <ProfileMenuRow title="Arkadaşlarım" count={friendCount} onPress={() => router.push('/friends')} />
-          <ProfileMenuRow title="Gelen İstekler" count={requestCount} onPress={() => router.push('/friends/requests')} />
-          <ProfileMenuRow title="Arkadaş Ekle" onPress={() => router.push('/friends/add')} />
-          <ProfileMenuRow title="İstatistikler" onPress={() => router.push('/stats')} />
-          <ProfileMenuRow title="Hedefler" count={goals.length} onPress={() => router.push('/goals')} />
-          <ProfileMenuRow title="Hastalıklar" count={conditions.length} onPress={() => router.push('/conditions')} />
-          <ProfileMenuRow
-            title="Besin Hassasiyetleri"
-            count={sensitivities.length}
-            onPress={() => router.push('/sensitivities')}
-          />
-          <ProfileMenuRow title="İlaçlar" count={medications.length} onPress={() => router.push('/medications')} />
-          <ProfileMenuRow title="Yemek & İçecek Listesi" onPress={() => router.push('/foods')} />
+        <View style={styles.block}>
+          <ProfileSection title="Hesap">
+            {renderRows(accountRows)}
+          </ProfileSection>
         </View>
 
-        <Button title="Çıkış Yap" variant="outline" onPress={handleSignOut} />
+        <View style={styles.block}>
+          <ProfileSection title="Hedefler & Takip">
+            {renderRows(goalsRows)}
+          </ProfileSection>
+        </View>
+
+        <View style={styles.block}>
+          <ProfileWidgetsSection profile={profile} />
+        </View>
+
+        <View style={styles.block}>
+          <ProfileSection title="Destek & Yasal">
+            {renderRows(supportRows)}
+          </ProfileSection>
+        </View>
+
+        <View style={styles.block}>
+          <ProfileSection title="Bizi Takip Edin">
+            {renderRows(followRows)}
+          </ProfileSection>
+        </View>
+
+        <View style={styles.block}>
+          <ProfileSection title="Hesap İşlemleri">
+            <ProfileSettingRow
+              icon="log-out-outline"
+              title="Çıkış Yap"
+              onPress={handleSignOut}
+              isLast={false}
+            />
+            <ProfileSettingRow
+              icon="person-remove-outline"
+              title="Hesabı Sil"
+              onPress={showComingSoon}
+              destructive
+              isLast
+            />
+          </ProfileSection>
+        </View>
       </ScrollView>
 
-      <ProfileImageViewer
-        visible={viewerOpen}
-        imageUri={originalUri}
-        onClose={() => setViewerOpen(false)}
-        onUpload={handleUploadPhoto}
-        onDelete={confirmDeletePhoto}
-        uploading={uploadingPhoto}
-      />
+      <Toast message={toastMessage} onHide={hideToast} />
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.white },
-  content: {
-    paddingBottom: spacing.xxl,
-    gap: spacing.md,
-  },
-  topBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.sm,
-    paddingBottom: spacing.sm,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.border,
-  },
-  topUsername: {
-    ...typography.bodySemiBold,
-    color: colors.textPrimary,
-    fontSize: 18,
-  },
-  settingsIcon: {
-    fontSize: 20,
-  },
-  profileRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.lg,
-    gap: spacing.lg,
-  },
-  statsRow: {
+  safe: {
     flex: 1,
-    flexDirection: 'row',
-    justifyContent: 'space-around',
+    backgroundColor: profilePageColors.background,
   },
-  statItem: {
-    alignItems: 'center',
-    gap: 2,
+  content: {
+    paddingBottom: 120,
+    gap: spacing.lg,
+    paddingTop: spacing.sm,
   },
-  statValue: {
-    ...typography.bodySemiBold,
+  pageTitle: {
+    ...typography.h2,
+    fontSize: 34,
+    lineHeight: 40,
     color: colors.textPrimary,
-    fontSize: 18,
-  },
-  statLabel: {
-    ...typography.caption,
-    color: colors.textSecondary,
-  },
-  identityBlock: {
     paddingHorizontal: spacing.lg,
-    gap: spacing.sm,
+    marginBottom: spacing.xs,
   },
-  nicknameInput: {
-    ...typography.bodySemiBold,
-    color: colors.textPrimary,
-    padding: 0,
-  },
-  bioInput: {
-    ...typography.body,
-    color: colors.textPrimary,
-    minHeight: 48,
-    textAlignVertical: 'top',
-    padding: 0,
-  },
-  bioCount: {
-    ...typography.caption,
-    color: colors.textSecondary,
-    alignSelf: 'flex-end',
-  },
-  saveTextBtn: {
-    alignSelf: 'flex-start',
-    backgroundColor: colors.primary,
-    borderRadius: radius.sm,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 8,
-  },
-  saveTextBtnPressed: {
-    opacity: 0.85,
-  },
-  saveTextLabel: {
-    ...typography.bodySmall,
-    color: colors.white,
-    fontFamily: typography.bodySemiBold.fontFamily,
-  },
-  email: {
-    ...typography.caption,
-    color: colors.textSecondary,
-  },
-  editProfileBtn: {
-    marginHorizontal: spacing.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.md,
-    paddingVertical: 8,
-    alignItems: 'center',
-    backgroundColor: colors.white,
-  },
-  editProfileBtnPressed: {
-    backgroundColor: colors.background,
-  },
-  editProfileText: {
-    ...typography.bodySmall,
-    color: colors.textPrimary,
-    fontFamily: typography.bodySemiBold.fontFamily,
-  },
-  metaCard: {
-    marginHorizontal: spacing.lg,
-    backgroundColor: colors.background,
-    borderRadius: radius.lg,
-    padding: spacing.md,
-    gap: 4,
-  },
-  metaLine: {
-    ...typography.bodySmall,
-    color: colors.textSecondary,
-  },
-  menuSection: {
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.border,
-  },
-  menuRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.border,
-    backgroundColor: colors.white,
-  },
-  menuRowPressed: {
-    backgroundColor: colors.background,
-  },
-  menuTitle: {
-    ...typography.body,
-    color: colors.textPrimary,
-  },
-  menuRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  block: {
     gap: spacing.xs,
-    minHeight: 22,
   },
-  menuCount: {
-    ...typography.bodySmall,
-    color: colors.textSecondary,
-    lineHeight: 22,
-    includeFontPadding: false,
-    textAlignVertical: 'center',
-  },
-  menuChevron: {
-    color: colors.textSecondary,
-    fontSize: 22,
-    lineHeight: 22,
-    includeFontPadding: false,
-    textAlignVertical: 'center',
-    marginTop: -1,
+  sectionTitle: {
+    fontSize: 13,
+    lineHeight: 18,
+    fontFamily: typography.bodySemiBold.fontFamily,
+    color: profilePageColors.sectionTitle,
+    paddingHorizontal: spacing.lg,
+    marginBottom: 2,
   },
 });

@@ -188,8 +188,8 @@ export function buildHealthAnalysisPayload({
   return payload;
 }
 
-export function buildAnalysisPrompt(payload) {
-  return `Aşağıdaki JSON, bir kullanıcının son ${ANALYSIS_PERIOD_DAYS} günlük sindirim ve yaşam tarzı kayıtlarını içeriyor. Türkçe, anlaşılır ve destekleyici bir sağlık analizi yaz.
+export function buildAnalysisPrompt(payload, userNote) {
+  let prompt = `Aşağıdaki JSON, bir kullanıcının son ${ANALYSIS_PERIOD_DAYS} günlük sindirim ve yaşam tarzı kayıtlarını içeriyor. Türkçe, anlaşılır ve destekleyici bir sağlık analizi yaz.
 
 Kurallar:
 - Teşhis koyma, doktorun yerine geçme
@@ -200,4 +200,10 @@ Kurallar:
 
 JSON veri:
 ${JSON.stringify(payload)}`;
+
+  if (userNote?.trim()) {
+    prompt += `\n\nKullanıcının özellikle sormak istediği konu:\n${userNote.trim()}\nBu notu analizde mutlaka dikkate al.`;
+  }
+
+  return prompt;
 }

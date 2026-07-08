@@ -54,6 +54,7 @@ function WeeklyScoreGrid({ scores, onDayPress, compact }) {
             {week.map((cell) => {
               const score = scoreMap[cell.date];
               const hasScore = cell.inRange && score != null;
+              const isPlaceholder = !cell.inRange;
 
               return (
                 <Pressable
@@ -63,12 +64,14 @@ function WeeklyScoreGrid({ scores, onDayPress, compact }) {
                   style={[
                     styles.weeklyCell,
                     compact && styles.weeklyCellCompact,
-                    !cell.inRange && styles.weeklyCellOutOfRange,
+                    isPlaceholder && styles.weeklyCellPlaceholder,
                     cell.inRange && score == null && styles.weeklyCellEmpty,
                     hasScore && { backgroundColor: getScoreColor(score) },
                     cell.isToday && styles.weeklyCellToday,
                   ]}
-                />
+                >
+                  {isPlaceholder ? <View style={styles.placeholderDot} /> : null}
+                </Pressable>
               );
             })}
           </View>
@@ -126,18 +129,27 @@ const styles = StyleSheet.create({
     aspectRatio: 1,
     borderRadius: radius.sm,
     backgroundColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   weeklyCellCompact: {
     borderRadius: radius.sm / 2,
   },
-  weeklyCellOutOfRange: {
-    backgroundColor: 'transparent',
+  weeklyCellPlaceholder: {
+    backgroundColor: '#F2F2F7',
     borderWidth: 1,
-    borderColor: colors.border,
-    opacity: 0.35,
+    borderColor: '#E3E3E8',
+    borderStyle: 'dashed',
   },
   weeklyCellEmpty: {
     backgroundColor: colors.border,
+  },
+  placeholderDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: colors.textMuted,
+    opacity: 0.45,
   },
   weeklyCellToday: {
     borderWidth: 2,

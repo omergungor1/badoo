@@ -1,21 +1,17 @@
 import { useCallback, useState } from 'react';
-import { Alert, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import HealthAiAnalysisSection from '../../components/analysis/HealthAiAnalysisSection';
 import FoodSensitivityCard from '../../components/sensitivity/FoodSensitivityCard';
-import Button from '../../components/ui/Button';
 import Card from '../../components/ui/Card';
 import ScoreGrid, { ScoreGridSummary } from '../../components/ui/ScoreGrid';
 import SectionTitle from '../../components/ui/SectionTitle';
 import { useAuth } from '../../context/AuthContext';
 import { getLogsForDate } from '../../services/logService';
 import { getUserFoodSensitivityInsights } from '../../services/foodSensitivityService';
-import {
-  createHealthAnalysis,
-  getHealthAnalyses,
-  getLatestHealthAnalysis,
-} from '../../services/healthAiAnalysisService';
-import { formatDate, formatShortDate, getLastNDays } from '../../utils/date';
+import { getHealthAnalyses } from '../../services/healthAiAnalysisService';
+import { getLastNDays } from '../../utils/date';
 import { calculateDailyDigestionScore } from '../../utils/digestionScore';
 import { colors, spacing, typography } from '../../theme';
 
@@ -24,29 +20,21 @@ export default function AnalysisScreen() {
   const router = useRouter();
   const [items, setItems] = useState([]);
   const [meta, setMeta] = useState({ days: 90, mealLogs: 0, symptomLogs: 0 });
-  const [latestAnalysis, setLatestAnalysis] = useState(null);
-  const [pastAnalyses, setPastAnalyses] = useState([]);
+  const [analyses, setAnalyses] = useState([]);
   const [digestionScores, setDigestionScores] = useState([]);
   const [refreshing, setRefreshing] = useState(false);
-  const [creating, setCreating] = useState(false);
 
   const loadInsights = useCallback(async () => {
     if (!user?.id) return;
 
-    const [
-      { data, meta: insightMeta },
-      { data: latest },
-      { data: history },
-    ] = await Promise.all([
+    const [{ data, meta: insightMeta }, { data: history }] = await Promise.all([
       getUserFoodSensitivityInsights(user.id),
-      getLatestHealthAnalysis(user.id),
-      getHealthAnalyses(user.id),
+      getHealthAnalyses(user.id, 3),
     ]);
 
     setItems(data || []);
     setMeta(insightMeta || { days: 90, mealLogs: 0, symptomLogs: 0 });
-    setLatestAnalysis(latest || null);
-    setPastAnalyses(history || []);
+    setAnalyses(history || []);
 
     const days = getLastNDays(28);
     const scoreResults = await Promise.all(
@@ -80,22 +68,6 @@ export default function AnalysisScreen() {
     setRefreshing(false);
   }
 
-  async function handleNewAnalysis() {
-    setCreating(true);
-    const { data, error } = await createHealthAnalysis(user.id);
-    setCreating(false);
-
-    if (error) {
-      Alert.alert('Analiz yapılamadı', error.message);
-      return;
-    }
-
-    await loadInsights();
-    router.push(`/ai-analysis/${data.id}`);
-  }
-
-  const olderAnalyses = pastAnalyses.filter((item) => item.id !== latestAnalysis?.id);
-
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <View style={styles.topBar}>
@@ -109,6 +81,12 @@ export default function AnalysisScreen() {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
         }
       >
+        <HealthAiAnalysisSection
+          userId={user?.id}
+          analyses={analyses}
+          onCreated={loadInsights}
+        />
+
         <Pressable onPress={() => router.push('/digestion-calendar')}>
           <Card>
             <SectionTitle title="Sindirim Takvimi" subtitle="Son 28 gün" />
@@ -116,52 +94,6 @@ export default function AnalysisScreen() {
             <ScoreGridSummary scores={digestionScores} />
           </Card>
         </Pressable>
-
-        <Card style={styles.aiCard}>
-          <Text style={styles.aiTitle}>AI Sağlık Analizi</Text>
-          <Text style={styles.aiSubtitle}>
-            Son 2 haftalık öğün, belirti, uyku, aktivite ve daha fazlasını AI ile değerlendir.
-          </Text>
-
-          {latestAnalysis ? (
-            <Pressable
-              style={styles.latestBtn}
-              onPress={() => router.push(`/ai-analysis/${latestAnalysis.id}`)}
-            >
-              <Text style={styles.latestLabel}>Son analiz</Text>
-              <Text style={styles.latestTitle}>{latestAnalysis.title}</Text>
-              <Text style={styles.latestMeta}>
-                {formatDate(latestAnalysis.created_at)} · {formatShortDate(latestAnalysis.period_start)} – {formatShortDate(latestAnalysis.period_end)}
-              </Text>
-            </Pressable>
-          ) : (
-            <Text style={styles.noAnalysis}>Henüz AI analizi yok. İlk analizini başlat.</Text>
-          )}
-
-          <Button
-            title={creating ? 'Analiz hazırlanıyor...' : 'Yeni Analiz Başlat'}
-            onPress={handleNewAnalysis}
-            loading={creating}
-          />
-        </Card>
-
-        {olderAnalyses.length ? (
-          <View style={styles.historySection}>
-            <Text style={styles.historyTitle}>Önceki analizler</Text>
-            {olderAnalyses.map((item) => (
-              <Pressable
-                key={item.id}
-                style={styles.historyItem}
-                onPress={() => router.push(`/ai-analysis/${item.id}`)}
-              >
-                <Text style={styles.historyItemTitle}>{item.title}</Text>
-                <Text style={styles.historyItemMeta}>
-                  {formatDate(item.created_at)}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
-        ) : null}
 
         <View style={styles.summaryRow}>
           <View style={styles.summaryItem}>
@@ -230,67 +162,6 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     gap: spacing.md,
     paddingBottom: spacing.xxl,
-  },
-  aiCard: {
-    gap: spacing.md,
-    backgroundColor: '#F8FBFF',
-    borderColor: '#D8E8FF',
-  },
-  aiTitle: {
-    ...typography.bodySemiBold,
-    color: colors.textPrimary,
-    fontSize: 17,
-  },
-  aiSubtitle: {
-    ...typography.bodySmall,
-    color: colors.textSecondary,
-    lineHeight: 20,
-  },
-  latestBtn: {
-    backgroundColor: colors.white,
-    borderRadius: 14,
-    padding: spacing.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    gap: 4,
-  },
-  latestLabel: {
-    ...typography.caption,
-    color: colors.primary,
-    fontFamily: typography.bodySemiBold.fontFamily,
-  },
-  latestTitle: {
-    ...typography.bodySemiBold,
-    color: colors.textPrimary,
-  },
-  latestMeta: {
-    ...typography.caption,
-    color: colors.textSecondary,
-  },
-  noAnalysis: {
-    ...typography.bodySmall,
-    color: colors.textSecondary,
-  },
-  historySection: {
-    gap: spacing.sm,
-  },
-  historyTitle: {
-    ...typography.bodySemiBold,
-    color: colors.textPrimary,
-  },
-  historyItem: {
-    backgroundColor: colors.background,
-    borderRadius: 12,
-    padding: spacing.md,
-    gap: 2,
-  },
-  historyItemTitle: {
-    ...typography.body,
-    color: colors.textPrimary,
-  },
-  historyItemMeta: {
-    ...typography.caption,
-    color: colors.textSecondary,
   },
   summaryRow: {
     flexDirection: 'row',

@@ -8,6 +8,7 @@ module.exports = () => ({
       googleServicesFile: './GoogleService-Info.plist',
       entitlements: {
         'aps-environment': process.env.EAS_BUILD_PROFILE === 'production' ? 'production' : 'development',
+        'com.apple.security.application-groups': ['group.com.omerexpo.badoo'],
       },
       infoPlist: {
         ...appJson.expo.ios?.infoPlist,
@@ -16,6 +17,7 @@ module.exports = () => ({
     },
     plugins: [
       ...(appJson.expo.plugins || []),
+      '@bacons/apple-targets',
       '@react-native-firebase/app',
       '@react-native-firebase/messaging',
       [

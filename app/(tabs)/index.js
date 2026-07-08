@@ -43,6 +43,8 @@ import { formatQuantityLabel } from '../../utils/foodQuantity';
 import { formatWater } from '../../utils/nutrition';
 import { consumedGlassesFromMl, GLASS_ML, goalGlassesFromMl } from '../../utils/water';
 import { subscribeMealShared, emitMealShared } from '../../utils/mealEvents';
+import { consumePendingMealCapture } from '../../utils/widgetLaunch';
+import { syncNutritionWidget } from '../../services/widgetService';
 import { colors, radius, spacing, typography } from '../../theme';
 
 function clampProgress(value) {
@@ -175,20 +177,20 @@ export default function HomeScreen() {
         trackColor: NUTRITION_RING_CONFIG.calories.trackColor,
       },
       {
-        key: 'protein',
-        label: NUTRITION_RING_CONFIG.protein.label,
-        progress: proteinProgress,
-        valueText: `${totals.protein}g/${proteinGoal}g`,
-        color: NUTRITION_RING_CONFIG.protein.color,
-        trackColor: NUTRITION_RING_CONFIG.protein.trackColor,
-      },
-      {
         key: 'water',
         label: NUTRITION_RING_CONFIG.water.label,
         progress: waterProgress,
         valueText: `${formatWater(waterTotal)}/${formatWater(waterGoal)}`,
         color: NUTRITION_RING_CONFIG.water.color,
         trackColor: NUTRITION_RING_CONFIG.water.trackColor,
+      },
+      {
+        key: 'protein',
+        label: NUTRITION_RING_CONFIG.protein.label,
+        progress: proteinProgress,
+        valueText: `${totals.protein}g/${proteinGoal}g`,
+        color: NUTRITION_RING_CONFIG.protein.color,
+        trackColor: NUTRITION_RING_CONFIG.protein.trackColor,
       },
       {
         key: 'activity',
@@ -202,6 +204,34 @@ export default function HomeScreen() {
   }, [totals, waterTotal, activityTotals, calorieGoal, proteinGoal, waterGoal, activityGoalType, activityGoalValue, activityGoalConfig]);
 
   const viewingToday = isToday(selectedDate);
+
+  useEffect(() => {
+    if (!viewingToday) return;
+
+    syncNutritionWidget({
+      calories: totals.calories,
+      calorieGoal,
+      protein: totals.protein,
+      proteinGoal,
+      water: waterTotal,
+      waterGoal,
+      activityProgress: getActivityProgress(activityTotals, activityGoalType, activityGoalValue),
+      activityLabel: activityGoalConfig.config.ringLabel,
+      activityValue: formatActivityProgressText(activityTotals, activityGoalType, activityGoalValue),
+    });
+  }, [
+    viewingToday,
+    totals.calories,
+    totals.protein,
+    calorieGoal,
+    proteinGoal,
+    waterTotal,
+    waterGoal,
+    activityTotals,
+    activityGoalType,
+    activityGoalValue,
+    activityGoalConfig,
+  ]);
 
   const mealPhotoItems = useMemo(
     () => timelineItems.filter((item) => item.logType === 'food' && item.image_url),
@@ -444,6 +474,18 @@ export default function HomeScreen() {
       await loadData();
     }
   }
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!viewingToday || !user?.id) return undefined;
+
+      if (consumePendingMealCapture()) {
+        handleAddMealPhoto();
+      }
+
+      return undefined;
+    }, [viewingToday, user?.id]),
+  );
 
   function handleMealModalClose() {
     setMealModalVisible(false);

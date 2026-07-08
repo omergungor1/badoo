@@ -6,8 +6,17 @@ import { colors, typography } from '../../theme';
 function HeaderBackButton() {
   const router = useRouter();
 
+  function handleBack() {
+    if (router.canGoBack()) {
+      router.back();
+      return;
+    }
+
+    router.replace('/(tabs)');
+  }
+
   return (
-    <Pressable onPress={() => router.back()} hitSlop={12} style={{ marginLeft: 4 }}>
+    <Pressable onPress={handleBack} hitSlop={12} style={{ marginLeft: 4 }}>
       <Ionicons name="chevron-back" size={28} color={colors.primary} />
     </Pressable>
   );
