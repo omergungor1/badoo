@@ -1,90 +1,46 @@
-import { useCallback, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { useFocusEffect, useRouter } from 'expo-router';
+import { useCallback, useMemo, useState } from 'react';
+import { Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useFocusEffect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { PRESET_CONDITIONS } from '../constants/conditions';
 import { useAuth } from '../context/AuthContext';
 import {
   addCondition,
   deleteCondition,
   getConditions,
-  updateCondition,
 } from '../services/profileService';
 import BackButton from '../components/ui/BackButton';
 import Button from '../components/ui/Button';
 import Card from '../components/ui/Card';
+import Chip from '../components/ui/Chip';
 import Input from '../components/ui/Input';
 import SectionTitle from '../components/ui/SectionTitle';
+import SwipeToDeleteRow from '../components/ui/SwipeToDeleteRow';
 import { colors, spacing, typography } from '../theme';
 
-function ConditionRow({ item, onUpdate, onDelete }) {
-  const [editing, setEditing] = useState(false);
-  const [name, setName] = useState(item.condition_name);
-  const [loading, setLoading] = useState(false);
+function normalizeName(value) {
+  return String(value || '').trim().toLocaleLowerCase('tr-TR');
+}
 
-  async function handleSave() {
-    const trimmed = name.trim();
-    if (!trimmed) {
-      Alert.alert('Hata', 'Hastalık adı boş olamaz.');
-      return;
-    }
-
-    if (trimmed === item.condition_name) {
-      setEditing(false);
-      return;
-    }
-
-    setLoading(true);
-    const { error } = await onUpdate(item.id, trimmed);
-    setLoading(false);
-
-    if (error) {
-      Alert.alert('Hata', error.message);
-      return;
-    }
-
-    setEditing(false);
-  }
-
-  function handleCancel() {
-    setName(item.condition_name);
-    setEditing(false);
-  }
-
-  if (editing) {
-    return (
-      <Card style={styles.rowCard}>
-        <Input value={name} onChangeText={setName} placeholder="Hastalık adı" />
-        <View style={styles.rowActions}>
-          <Button title="Vazgeç" variant="outline" onPress={handleCancel} style={styles.actionBtn} />
-          <Button title="Kaydet" onPress={handleSave} loading={loading} style={styles.actionBtn} />
-        </View>
-      </Card>
-    );
-  }
-
+function ConditionRow({ item }) {
   return (
     <Card style={styles.rowCard}>
-      <View style={styles.rowHeader}>
-        <Text style={styles.rowName}>{item.condition_name}</Text>
-        <View style={styles.rowActions}>
-          <Pressable onPress={() => setEditing(true)} hitSlop={8}>
-            <Text style={styles.link}>Düzenle</Text>
-          </Pressable>
-          <Pressable onPress={() => onDelete(item)} hitSlop={8}>
-            <Text style={styles.danger}>Sil</Text>
-          </Pressable>
-        </View>
-      </View>
+      <Text style={styles.rowName}>{item.condition_name}</Text>
     </Card>
   );
 }
 
 export default function ConditionsScreen() {
   const { user } = useAuth();
-  const router = useRouter();
   const [conditions, setConditions] = useState([]);
   const [newName, setNewName] = useState('');
   const [adding, setAdding] = useState(false);
+  const [addingPreset, setAddingPreset] = useState(null);
+
+  const availablePresets = useMemo(() => {
+    const owned = new Set(conditions.map((item) => normalizeName(item.condition_name)));
+    return PRESET_CONDITIONS.filter((name) => !owned.has(normalizeName(name)));
+  }, [conditions]);
 
   const loadConditions = useCallback(async () => {
     if (!user?.id) return;
@@ -104,51 +60,48 @@ export default function ConditionsScreen() {
     }, [loadConditions]),
   );
 
-  async function handleAdd() {
-    if (!user?.id) return;
+  async function addByName(name) {
+    if (!user?.id) return null;
 
-    const trimmed = newName.trim();
+    const trimmed = name.trim();
     if (!trimmed) {
       Alert.alert('Hata', 'Hastalık adı girin.');
-      return;
+      return null;
     }
 
     const exists = conditions.some(
-      (item) => item.condition_name.toLowerCase() === trimmed.toLowerCase(),
+      (item) => normalizeName(item.condition_name) === normalizeName(trimmed),
     );
     if (exists) {
       Alert.alert('Hata', 'Bu hastalık zaten listede.');
-      return;
+      return null;
     }
 
-    setAdding(true);
     const { data, error } = await addCondition(user.id, trimmed);
-    setAdding(false);
-
     if (error) {
       Alert.alert('Hata', error.message);
-      return;
+      return null;
     }
 
-    setNewName('');
     setConditions((prev) =>
       [...prev, data].sort((a, b) => a.condition_name.localeCompare(b.condition_name, 'tr')),
     );
+    return data;
   }
 
-  async function handleUpdate(conditionId, conditionName) {
-    if (!user?.id) return { error: { message: 'Oturum bulunamadı.' } };
+  async function handleAdd() {
+    setAdding(true);
+    const data = await addByName(newName);
+    setAdding(false);
+    if (data) setNewName('');
+  }
 
-    const { data, error } = await updateCondition(user.id, conditionId, conditionName);
-    if (!error && data) {
-      setConditions((prev) =>
-        prev
-          .map((item) => (item.id === conditionId ? data : item))
-          .sort((a, b) => a.condition_name.localeCompare(b.condition_name, 'tr')),
-      );
-    }
+  async function handlePresetAdd(name) {
+    if (addingPreset) return;
 
-    return { error };
+    setAddingPreset(name);
+    await addByName(name);
+    setAddingPreset(null);
   }
 
   function confirmDelete(item) {
@@ -184,7 +137,27 @@ export default function ConditionsScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
-        <SectionTitle title="Yeni Hastalık" subtitle="Listeye eklemek için adı yazın" />
+        {availablePresets.length ? (
+          <>
+            <SectionTitle
+              title="Hazır Hastalıklar"
+              subtitle="Dokunarak hızlıca ekle"
+            />
+            <Card>
+              <View style={styles.chips}>
+                {availablePresets.map((name) => (
+                  <Chip
+                    key={name}
+                    label={addingPreset === name ? 'Ekleniyor…' : `+ ${name}`}
+                    onPress={() => handlePresetAdd(name)}
+                  />
+                ))}
+              </View>
+            </Card>
+          </>
+        ) : null}
+
+        <SectionTitle title="Yeni Hastalık" subtitle="Listede yoksa adını yazarak ekle" />
         <Card>
           <Input
             label="Hastalık adı"
@@ -201,17 +174,18 @@ export default function ConditionsScreen() {
         />
 
         {conditions.length ? (
-          conditions.map((item) => (
-            <ConditionRow
-              key={item.id}
-              item={item}
-              onUpdate={handleUpdate}
-              onDelete={confirmDelete}
-            />
-          ))
+          <View style={styles.list}>
+            {conditions.map((item) => (
+              <SwipeToDeleteRow key={item.id} onDelete={() => confirmDelete(item)}>
+                <ConditionRow item={item} />
+              </SwipeToDeleteRow>
+            ))}
+          </View>
         ) : (
           <Card>
-            <Text style={styles.empty}>Kayıtlı hastalık yok. Yukarıdan yeni hastalık ekleyebilirsiniz.</Text>
+            <Text style={styles.empty}>
+              Kayıtlı hastalık yok. Yukarıdaki hazır listeden seçebilir veya yeni hastalık ekleyebilirsin.
+            </Text>
           </Card>
         )}
       </ScrollView>
@@ -231,18 +205,16 @@ const styles = StyleSheet.create({
   },
   headerTitle: { ...typography.headingMedium, color: colors.textPrimary, flex: 1 },
   content: { padding: spacing.lg, gap: spacing.md, paddingBottom: spacing.xxl },
-  addBtn: { marginTop: spacing.sm },
-  rowCard: { gap: spacing.sm },
-  rowHeader: {
+  chips: {
     flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: spacing.md,
+    flexWrap: 'wrap',
+    gap: spacing.sm,
   },
-  rowName: { ...typography.body, color: colors.textPrimary, flex: 1 },
-  rowActions: { flexDirection: 'row', gap: spacing.md, alignItems: 'center' },
-  actionBtn: { flex: 1 },
-  link: { ...typography.bodySmall, color: colors.primary, fontWeight: '600' },
-  danger: { ...typography.bodySmall, color: colors.danger, fontWeight: '600' },
+  addBtn: { marginTop: spacing.sm },
+  list: { gap: spacing.sm },
+  rowCard: {
+    paddingVertical: spacing.md,
+  },
+  rowName: { ...typography.body, color: colors.textPrimary },
   empty: { ...typography.body, color: colors.textSecondary },
 });

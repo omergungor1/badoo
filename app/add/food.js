@@ -15,8 +15,8 @@ import {
   formatNutritionBasis,
   formatQuantityLabel,
   getDefaultQuantity,
-  isGramUnit,
   normalizeUnitType,
+  usesNumericQuantityInput,
 } from '../../utils/foodQuantity';
 import { colors, spacing, typography } from '../../theme';
 
@@ -47,7 +47,9 @@ export default function AddFoodScreen() {
   const [loading, setLoading] = useState(false);
 
   const selectedUnitType = selected ? normalizeUnitType(selected.unit_type) : null;
-  const isGram = selected ? isGramUnit(selected.unit_type) : false;
+  const usesNumericInput = selected
+    ? usesNumericQuantityInput(selected.unit_type)
+    : false;
 
   async function handleSearch(text) {
     setQuery(text);
@@ -77,7 +79,7 @@ export default function AddFoodScreen() {
 
   function getCurrentQuantity() {
     if (!selected) return null;
-    if (isGramUnit(selected.unit_type)) {
+    if (usesNumericQuantityInput(selected.unit_type)) {
       return Number(gramQuantity);
     }
     return pieceQuantity;
@@ -127,6 +129,7 @@ export default function AddFoodScreen() {
       items: batch.map((item) => ({
         foodId: item.food.id,
         quantity: item.quantity,
+        unitType: item.food.unit_type,
       })),
     });
     await completeTask(user.id, 'meals');
@@ -172,9 +175,9 @@ export default function AddFoodScreen() {
             Besin değerleri {formatNutritionBasis(selectedUnitType)} için hesaplanır.
           </Text>
 
-          {isGram ? (
+          {usesNumericInput ? (
             <Input
-              label="Miktar (gram)"
+              label={`Miktar (${FOOD_UNIT_LABELS[selectedUnitType]})`}
               value={gramQuantity}
               onChangeText={setGramQuantity}
               keyboardType="number-pad"

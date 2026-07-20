@@ -55,6 +55,22 @@ export default function AddLayout() {
       {Object.entries(ADD_SCREEN_TITLES).map(([name, title]) => (
         <Stack.Screen key={name} name={name} options={{ title }} />
       ))}
+      <Stack.Screen
+        name="meal-photo"
+        options={{
+          headerShown: false,
+          animation: 'slide_from_bottom',
+          contentStyle: { backgroundColor: '#000' },
+        }}
+      />
+      <Stack.Screen
+        name="voice-note"
+        options={{
+          headerShown: false,
+          animation: 'slide_from_bottom',
+          contentStyle: { backgroundColor: '#F2F2F7' },
+        }}
+      />
     </Stack>
   );
 }

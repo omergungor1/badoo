@@ -31,6 +31,16 @@ struct WidgetNutritionData: Codable {
         guard calorieGoal > 0 else { return 0 }
         return min(Double(calories) / Double(calorieGoal), 1)
     }
+
+    var waterProgress: Double {
+        guard waterGoal > 0 else { return 0 }
+        return min(Double(water) / Double(waterGoal), 1)
+    }
+
+    /// activityProgress App Group'ta 0–100 olarak saklanır.
+    var activityProgressRatio: Double {
+        min(max(Double(activityProgress) / 100.0, 0), 1)
+    }
 }
 
 enum WidgetDataStore {

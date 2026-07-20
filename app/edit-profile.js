@@ -1,10 +1,16 @@
 import { useEffect, useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ACTIVITY_GOAL_TYPE_OPTIONS, GENDERS } from '../constants/onboarding';
 import { useAuth } from '../context/AuthContext';
+import {
+  deleteProfileImage,
+  pickProfileImage,
+  uploadProfileImage,
+} from '../services/profileImageService';
 import { updateProfile } from '../services/profileService';
+import ProfileAvatar from '../components/profile/ProfileAvatar';
 import BackButton from '../components/ui/BackButton';
 import Card from '../components/ui/Card';
 import Chip from '../components/ui/Chip';
@@ -20,6 +26,8 @@ export default function EditProfileScreen() {
   const { user, profile, refreshProfile } = useAuth();
   const router = useRouter();
   const [loading, setLoading] = useState(false);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [localThumbUri, setLocalThumbUri] = useState(null);
 
   const [birthYear, setBirthYear] = useState('');
   const [gender, setGender] = useState('');
@@ -30,6 +38,9 @@ export default function EditProfileScreen() {
   const [activityGoal, setActivityGoal] = useState('10000');
   const [activityGoalType, setActivityGoalType] = useState('steps');
   const [waterGlasses, setWaterGlasses] = useState(8);
+
+  const thumbUri = localThumbUri || profile?.profile_image_thumb_url || null;
+  const hasPhoto = Boolean(thumbUri);
 
   useEffect(() => {
     if (!profile) return;
@@ -47,7 +58,61 @@ export default function EditProfileScreen() {
         : String(getDefaultActivityGoal(profile.daily_activity_goal_type)),
     );
     setActivityGoalType(profile.daily_activity_goal_type || 'steps');
+    setLocalThumbUri(null);
   }, [profile]);
+
+  async function handleUploadPhoto() {
+    if (!user?.id || uploadingPhoto) return;
+
+    const { uri, error: pickError } = await pickProfileImage();
+    if (pickError) {
+      Alert.alert('Hata', pickError.message);
+      return;
+    }
+    if (!uri) return;
+
+    setUploadingPhoto(true);
+    setLocalThumbUri(uri);
+
+    const { previewUri, error } = await uploadProfileImage(user.id, uri);
+    setUploadingPhoto(false);
+
+    if (error) {
+      setLocalThumbUri(null);
+      Alert.alert('Hata', error.message);
+      return;
+    }
+
+    setLocalThumbUri(previewUri || uri);
+    await refreshProfile(user.id);
+  }
+
+  async function handleDeletePhoto() {
+    if (!user?.id || uploadingPhoto) return;
+
+    setUploadingPhoto(true);
+    const { error } = await deleteProfileImage(user.id);
+    setUploadingPhoto(false);
+
+    if (error) {
+      Alert.alert('Hata', error.message);
+      return;
+    }
+
+    setLocalThumbUri(null);
+    await refreshProfile(user.id);
+  }
+
+  function confirmDeletePhoto() {
+    Alert.alert(
+      'Profil fotoğrafını sil',
+      'Profil fotoğrafını kaldırmak istediğinize emin misiniz?',
+      [
+        { text: 'İptal', style: 'cancel' },
+        { text: 'Sil', style: 'destructive', onPress: handleDeletePhoto },
+      ],
+    );
+  }
 
   async function handleSave() {
     if (!user?.id) return;
@@ -109,6 +174,35 @@ export default function EditProfileScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
+        <SectionTitle title="Profil Fotoğrafı" subtitle="Galeriden seçin veya mevcut fotoğrafı kaldırın" />
+        <Card style={styles.photoCard}>
+          <ProfileAvatar
+            thumbUri={thumbUri}
+            uploading={uploadingPhoto}
+            onPress={handleUploadPhoto}
+          />
+          <View style={styles.photoActions}>
+            <Pressable
+              onPress={handleUploadPhoto}
+              disabled={uploadingPhoto}
+              style={({ pressed }) => [styles.photoActionBtn, pressed && styles.photoActionPressed]}
+            >
+              <Text style={styles.photoActionText}>
+                {hasPhoto ? 'Fotoğrafı Değiştir' : 'Fotoğraf Ekle'}
+              </Text>
+            </Pressable>
+            {hasPhoto ? (
+              <Pressable
+                onPress={confirmDeletePhoto}
+                disabled={uploadingPhoto}
+                style={({ pressed }) => [styles.photoActionBtn, pressed && styles.photoActionPressed]}
+              >
+                <Text style={styles.photoRemoveText}>Fotoğrafı Kaldır</Text>
+              </Pressable>
+            ) : null}
+          </View>
+        </Card>
+
         <SectionTitle title="Temel Bilgiler" subtitle="Boy, kilo ve kişisel bilgiler" />
         <Card style={styles.card}>
           <Input
@@ -189,7 +283,13 @@ export default function EditProfileScreen() {
           />
 
           <Text style={styles.fieldLabel}>Günlük su hedefi (1 bardak = 200 ml)</Text>
-          <WaterGlassPicker glasses={waterGlasses} onChange={setWaterGlasses} />
+          <WaterGlassPicker
+            title="Su hedefi"
+            glasses={waterGlasses}
+            onChange={setWaterGlasses}
+            min={1}
+            max={15}
+          />
         </Card>
 
         <FormActions onSave={handleSave} loading={loading} />
@@ -211,6 +311,30 @@ const styles = StyleSheet.create({
   headerTitle: { ...typography.headingMedium, color: colors.textPrimary, flex: 1 },
   content: { padding: spacing.lg, gap: spacing.md, paddingBottom: spacing.xxl },
   card: { gap: spacing.md },
+  photoCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+  },
+  photoActions: {
+    flex: 1,
+    gap: spacing.sm,
+  },
+  photoActionBtn: {
+    alignSelf: 'flex-start',
+    paddingVertical: spacing.xs,
+  },
+  photoActionPressed: {
+    opacity: 0.7,
+  },
+  photoActionText: {
+    ...typography.bodySemiBold,
+    color: colors.primary,
+  },
+  photoRemoveText: {
+    ...typography.bodySemiBold,
+    color: colors.danger,
+  },
   fieldLabel: {
     ...typography.bodySmall,
     color: colors.textSecondary,

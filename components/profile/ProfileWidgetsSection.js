@@ -1,11 +1,16 @@
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
-import { PROFILE_WIDGETS, WIDGET_ADD_INSTRUCTIONS, WIDGET_FAMILY } from '../../constants/widgetCatalog';
+import {
+  PROFILE_WIDGETS,
+  PROGRESS_RING_COLORS,
+  WIDGET_ADD_INSTRUCTIONS,
+  WIDGET_FAMILY,
+} from '../../constants/widgetCatalog';
 import { WIDGET_KINDS } from '../../constants/widgets';
+import ProgressRing from '../ui/ProgressRing';
 import { getActivityGoal } from '../../utils/activity';
 import { profilePageColors } from './ProfileSection';
-import { colors, spacing, typography } from '../../theme';
+import { colors, radius, spacing, typography } from '../../theme';
 
 const MEDIUM_WIDTH = 300;
 const MEDIUM_HEIGHT = 200;
@@ -16,19 +21,16 @@ const SCROLL_AREA_HEIGHT = MEDIUM_HEIGHT + spacing.sm + CARD_META_HEIGHT + spaci
 const ACCENT_BLUE = '#2E8CFF';
 const CALORIE_TEXT = '#8CC7FF';
 const FLAME_ORANGE = '#FF7A00';
+const RING_OUTER = 44;
+const RING_STROKE = 3;
+const RING_INNER = 34;
+const LOCK_RING_SIZE = 28;
+const LOCK_RING_STROKE = 2.5;
 
-function WidgetGradient({ gradId, colors: gradientColors, style, children }) {
+function WidgetSurface({ colors: surfaceColors, style, children }) {
   return (
-    <View style={[style, styles.gradientWrap]}>
-      <Svg width="100%" height="100%" style={StyleSheet.absoluteFillObject}>
-        <Defs>
-          <LinearGradient id={gradId} x1="0%" y1="0%" x2="100%" y2="100%">
-            <Stop offset="0%" stopColor={gradientColors[0]} />
-            <Stop offset="100%" stopColor={gradientColors[1]} />
-          </LinearGradient>
-        </Defs>
-        <Rect width="100%" height="100%" fill={`url(#${gradId})`} />
-      </Svg>
+    <View style={[style, styles.widgetSurface, { backgroundColor: surfaceColors[0] }]}>
+      <View style={[styles.widgetSurfaceTint, { backgroundColor: surfaceColors[1] }]} />
       {children}
     </View>
   );
@@ -55,13 +57,63 @@ function QuickActionItem({ icon, title, subtitle }) {
   );
 }
 
-function QuickActionsHomePreview({ widget, gradId }) {
+function ProgressQuickActionItem({ icon, title, subtitle, progress, ringColor, trackColor }) {
+  const showRing = progress != null;
+
   return (
-    <WidgetGradient
-      gradId={gradId}
-      colors={widget.gradient}
-      style={[styles.widgetBody, styles.mediumWidget]}
-    >
+    <View style={styles.quickActionItem}>
+      <View style={styles.quickActionIconWrap}>
+        {showRing ? (
+          <ProgressRing
+            size={RING_OUTER}
+            strokeWidth={RING_STROKE}
+            progress={progress}
+            color={ringColor}
+            trackColor={trackColor}
+          >
+            <View style={styles.quickActionIconCircleInner}>
+              <Ionicons name={icon} size={15} color="#FFFFFF" />
+            </View>
+          </ProgressRing>
+        ) : (
+          <View style={styles.quickActionIconCircle}>
+            <Ionicons name={icon} size={16} color="#FFFFFF" />
+          </View>
+        )}
+        <View style={styles.quickActionPlus}>
+          <Ionicons name="add" size={8} color="#FFFFFF" />
+        </View>
+      </View>
+      <Text style={styles.quickActionTitle} numberOfLines={1}>
+        {title}
+      </Text>
+      <Text style={styles.quickActionSubtitle} numberOfLines={1}>
+        {subtitle}
+      </Text>
+    </View>
+  );
+}
+
+function resolveActionProgress(action, nutrition) {
+  if (!action.progressKey) return null;
+
+  const palette = PROGRESS_RING_COLORS[action.progressKey];
+  const progressMap = {
+    calories: nutrition.calorieProgress * 100,
+    water: nutrition.waterProgress * 100,
+    activity: nutrition.activityProgress,
+  };
+
+  return {
+    progress: progressMap[action.progressKey] ?? 0,
+    ringColor: palette.color,
+    trackColor: palette.trackColor,
+  };
+}
+
+function QuickActionsHomePreview({ widget }) {
+  return (
+    <WidgetSurface colors={widget.gradient} style={[styles.widgetBody, styles.mediumWidget]}>
       <View style={styles.quickActionsHeader}>
         <Text style={styles.quickActionsHeading}>Hızlı ekle</Text>
         <Text style={styles.quickActionsBrand}>Badoo</Text>
@@ -71,23 +123,80 @@ function QuickActionsHomePreview({ widget, gradId }) {
           <QuickActionItem key={action.title} {...action} />
         ))}
       </View>
-    </WidgetGradient>
+    </WidgetSurface>
   );
 }
 
-function QuickActionsLockPreview({ widget, gradId }) {
+function QuickActionsLockPreview({ widget }) {
   return (
-    <WidgetGradient
-      gradId={gradId}
-      colors={widget.gradient}
-      style={[styles.widgetBody, styles.lockWidget]}
-    >
+    <WidgetSurface colors={widget.gradient} style={[styles.widgetBody, styles.lockWidget]}>
       <View style={styles.lockQuickActionsRow}>
         {widget.actions.map((action) => (
           <Ionicons key={action.title} name={action.icon} size={18} color="#FFFFFF" />
         ))}
       </View>
-    </WidgetGradient>
+    </WidgetSurface>
+  );
+}
+
+function QuickProgressHomePreview({ widget, nutrition }) {
+  return (
+    <WidgetSurface colors={widget.gradient} style={[styles.widgetBody, styles.mediumWidget]}>
+      <View style={styles.quickActionsHeader}>
+        <Text style={styles.quickActionsHeading}>Hızlı hedef</Text>
+        <Text style={styles.quickActionsBrand}>Badoo</Text>
+      </View>
+      <View style={styles.quickActionsRow}>
+        {widget.actions.map((action) => {
+          const ring = resolveActionProgress(action, nutrition);
+          return (
+            <ProgressQuickActionItem
+              key={action.title}
+              icon={action.icon}
+              title={action.title}
+              subtitle={action.subtitle}
+              progress={ring?.progress}
+              ringColor={ring?.ringColor}
+              trackColor={ring?.trackColor}
+            />
+          );
+        })}
+      </View>
+    </WidgetSurface>
+  );
+}
+
+function QuickProgressLockPreview({ widget, nutrition }) {
+  return (
+    <WidgetSurface colors={widget.gradient} style={[styles.widgetBody, styles.lockWidget]}>
+      <View style={styles.lockQuickActionsRow}>
+        {widget.actions.map((action) => {
+          const ring = resolveActionProgress(action, nutrition);
+
+          if (!ring) {
+            return (
+              <View key={action.title} style={styles.lockProgressIconSlot}>
+                <Ionicons name={action.icon} size={14} color="#FFFFFF" />
+              </View>
+            );
+          }
+
+          return (
+            <View key={action.title} style={styles.lockProgressIconSlot}>
+              <ProgressRing
+                size={LOCK_RING_SIZE}
+                strokeWidth={LOCK_RING_STROKE}
+                progress={ring.progress}
+                color={ring.ringColor}
+                trackColor={ring.trackColor}
+              >
+                <Ionicons name={action.icon} size={12} color="#FFFFFF" />
+              </ProgressRing>
+            </View>
+          );
+        })}
+      </View>
+    </WidgetSurface>
   );
 }
 
@@ -107,15 +216,11 @@ function NutritionMiniStat({ icon, value, label }) {
   );
 }
 
-function NutritionHomePreview({ widget, nutrition, gradId }) {
+function NutritionHomePreview({ widget, nutrition }) {
   const progressWidth = `${Math.max(3, nutrition.calorieProgress * 100)}%`;
 
   return (
-    <WidgetGradient
-      gradId={gradId}
-      colors={widget.gradient}
-      style={[styles.widgetBody, styles.mediumWidget]}
-    >
+    <WidgetSurface colors={widget.gradient} style={[styles.widgetBody, styles.mediumWidget]}>
       <View style={styles.nutritionTopRow}>
         <Ionicons name="flame" size={14} color={FLAME_ORANGE} />
         <Text style={styles.nutritionCalories}>{nutrition.caloriesLeft}</Text>
@@ -135,46 +240,54 @@ function NutritionHomePreview({ widget, nutrition, gradId }) {
           label={nutrition.activityLabel}
         />
       </View>
-    </WidgetGradient>
+    </WidgetSurface>
   );
 }
 
-function NutritionLockPreview({ widget, nutrition, gradId }) {
+function NutritionLockPreview({ widget, nutrition }) {
   return (
-    <WidgetGradient
-      gradId={gradId}
-      colors={widget.gradient}
-      style={[styles.widgetBody, styles.lockWidget]}
-    >
-      <View style={styles.lockNutritionRow}>
-        <Ionicons name="flame" size={13} color={FLAME_ORANGE} />
-        <Text style={styles.lockNutritionText}>
-          {nutrition.calories}/{nutrition.calorieGoal} kcal
-        </Text>
-        <View style={styles.lockNutritionSpacer} />
-        <Text style={styles.lockNutritionText}>{nutrition.protein}g</Text>
-        <Text style={styles.lockNutritionText}>{nutrition.water}ml</Text>
+    <WidgetSurface colors={widget.gradient} style={[styles.widgetBody, styles.lockWidget]}>
+      <View style={styles.lockNutritionStack}>
+        <View style={styles.lockNutritionTop}>
+          <Ionicons name="flame" size={12} color={FLAME_ORANGE} />
+          <Text style={styles.lockNutritionCalories}>{nutrition.caloriesLeft}</Text>
+          <Text style={styles.lockNutritionCaloriesLabel}>kcal kaldı</Text>
+        </View>
+        <View style={styles.lockNutritionMeta}>
+          <Text style={styles.lockNutritionMetaText}>{nutrition.protein}g protein</Text>
+          <Text style={styles.lockNutritionMetaText}>{nutrition.water}ml su</Text>
+          <Text style={[styles.lockNutritionMetaText, styles.lockNutritionMetaFlex]} numberOfLines={1}>
+            {nutrition.activityValue}
+          </Text>
+        </View>
       </View>
-    </WidgetGradient>
+    </WidgetSurface>
   );
 }
 
 function WidgetPreview({ widget, nutrition }) {
-  const gradId = `widget-grad-${widget.key}`;
   const isLock = widget.family === WIDGET_FAMILY.accessoryRectangular;
 
   if (widget.kind === WIDGET_KINDS.quickActions) {
     return isLock ? (
-      <QuickActionsLockPreview widget={widget} gradId={gradId} />
+      <QuickActionsLockPreview widget={widget} />
     ) : (
-      <QuickActionsHomePreview widget={widget} gradId={gradId} />
+      <QuickActionsHomePreview widget={widget} />
+    );
+  }
+
+  if (widget.kind === WIDGET_KINDS.quickProgress) {
+    return isLock ? (
+      <QuickProgressLockPreview widget={widget} nutrition={nutrition} />
+    ) : (
+      <QuickProgressHomePreview widget={widget} nutrition={nutrition} />
     );
   }
 
   return isLock ? (
-    <NutritionLockPreview widget={widget} nutrition={nutrition} gradId={gradId} />
+    <NutritionLockPreview widget={widget} nutrition={nutrition} />
   ) : (
-    <NutritionHomePreview widget={widget} nutrition={nutrition} gradId={gradId} />
+    <NutritionHomePreview widget={widget} nutrition={nutrition} />
   );
 }
 
@@ -204,15 +317,22 @@ function buildNutritionPreview(profile) {
   const waterGoal = profile?.daily_water_goal || 2000;
   const activityGoal = getActivityGoal(profile);
 
+  // Profil önizlemesinde halkaların doluluğunu göstermek için örnek değerler
+  const calorieProgress = 0.62;
+  const waterProgress = 0.45;
+  const activityProgress = 38;
+
   return {
-    calories: 0,
-    caloriesLeft: calorieGoal,
+    calories: Math.round(calorieGoal * calorieProgress),
+    caloriesLeft: Math.round(calorieGoal * (1 - calorieProgress)),
     calorieGoal,
-    calorieProgress: 0,
-    protein: 0,
-    water: 0,
-    waterLeft: waterGoal,
-    activityValue: '0',
+    calorieProgress,
+    protein: Math.round(proteinGoal * 0.55),
+    water: Math.round(waterGoal * waterProgress),
+    waterLeft: Math.round(waterGoal * (1 - waterProgress)),
+    waterProgress,
+    activityProgress,
+    activityValue: '3.2k/8k',
     activityLabel: activityGoal.config.label,
     proteinGoal,
     waterGoal,
@@ -319,11 +439,15 @@ const styles = StyleSheet.create({
     fontFamily: typography.bodySemiBold.fontFamily,
     lineHeight: 16,
   },
-  gradientWrap: {
+  widgetSurface: {
     overflow: 'hidden',
     borderRadius: radius.lg,
     width: '100%',
     height: '100%',
+  },
+  widgetSurfaceTint: {
+    ...StyleSheet.absoluteFillObject,
+    opacity: 0.28,
   },
   widgetBody: {
     borderRadius: radius.lg,
@@ -379,9 +503,17 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   quickActionIconCircle: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: RING_OUTER,
+    height: RING_OUTER,
+    borderRadius: RING_OUTER / 2,
+    backgroundColor: 'rgba(255,255,255,0.14)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  quickActionIconCircleInner: {
+    width: RING_INNER,
+    height: RING_INNER,
+    borderRadius: RING_INNER / 2,
     backgroundColor: 'rgba(255,255,255,0.14)',
     alignItems: 'center',
     justifyContent: 'center',
@@ -415,6 +547,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 4,
+  },
+  lockProgressIconSlot: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   nutritionTopRow: {
     flexDirection: 'row',
@@ -473,19 +610,41 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.65)',
     includeFontPadding: false,
   },
-  lockNutritionRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
+  lockNutritionStack: {
+    gap: 4,
   },
-  lockNutritionText: {
-    fontSize: 11,
-    lineHeight: 14,
+  lockNutritionTop: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 4,
+  },
+  lockNutritionCalories: {
+    fontSize: 16,
+    lineHeight: 18,
     fontFamily: typography.bodySemiBold.fontFamily,
-    color: '#FFFFFF',
+    color: CALORIE_TEXT,
     includeFontPadding: false,
   },
-  lockNutritionSpacer: {
+  lockNutritionCaloriesLabel: {
+    fontSize: 10,
+    lineHeight: 12,
+    fontFamily: typography.bodySemiBold.fontFamily,
+    color: 'rgba(255,255,255,0.85)',
+    includeFontPadding: false,
+  },
+  lockNutritionMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  lockNutritionMetaText: {
+    fontSize: 10,
+    lineHeight: 12,
+    fontFamily: typography.bodySemiBold.fontFamily,
+    color: 'rgba(255,255,255,0.8)',
+    includeFontPadding: false,
+  },
+  lockNutritionMetaFlex: {
     flex: 1,
   },
 });

@@ -1,7 +1,5 @@
 import { useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
   Dimensions,
   Image,
   Modal,
@@ -18,9 +16,6 @@ import { useAuth } from '../../context/AuthContext';
 import { QUICK_ADD_ITEMS } from '../../constants/onboarding';
 import { MEAL_QUICK_ADD_ITEM } from '../../constants/meals';
 import { PERIOD_QUICK_ADD_ITEM } from '../../constants/period';
-import { completeTask } from '../../services/logService';
-import { pickMealPhoto, uploadMealPhoto } from '../../services/mealPhotoService';
-import { emitMealShared } from '../../utils/mealEvents';
 import { colors, radius, spacing, typography } from '../../theme';
 
 const PAGE_SIZE = 4;
@@ -76,8 +71,7 @@ function QuickAddPage({ pageItems, onSelect }) {
 export default function QuickAddSheet({ visible, onClose }) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { profile, user } = useAuth();
-  const [uploading, setUploading] = useState(false);
+  const { profile } = useAuth();
   const [pageIndex, setPageIndex] = useState(0);
 
   const items = profile?.gender === 'kadın'
@@ -92,41 +86,12 @@ export default function QuickAddSheet({ visible, onClose }) {
     }
   }, [visible]);
 
-  async function handleShareMeal() {
-    if (!user?.id || uploading) return;
-
-    const { uri, error: pickError } = await pickMealPhoto();
-
-    onClose();
-
-    if (pickError) {
-      Alert.alert('Hata', pickError.message);
-      return;
-    }
-
-    if (!uri) return;
-
-    setUploading(true);
-    const { data, error } = await uploadMealPhoto(user.id, uri);
-    setUploading(false);
-
-    if (error) {
-      Alert.alert('Hata', error.message || 'Öğün fotoğrafı yüklenemedi.');
-      return;
-    }
-
-    if (data) {
-      await completeTask(user.id, 'meals');
-      emitMealShared(data);
-    }
-  }
-
   function handleSelect(item) {
+    onClose();
     if (item.action === 'meal') {
-      handleShareMeal();
+      router.push('/add/meal-photo');
       return;
     }
-    onClose();
     router.push(item.route);
   }
 
@@ -171,13 +136,6 @@ export default function QuickAddSheet({ visible, onClose }) {
               ))}
             </ScrollView>
           </View>
-        </View>
-      </Modal>
-
-      <Modal visible={uploading} transparent animationType="fade">
-        <View style={styles.uploadOverlay}>
-          <ActivityIndicator size="large" color={colors.white} />
-          <Text style={styles.uploadText}>Öğün yükleniyor...</Text>
         </View>
       </Modal>
     </>
@@ -268,17 +226,5 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     fontFamily: typography.bodySemiBold?.fontFamily || typography.body.fontFamily,
     textAlign: 'center',
-  },
-  uploadOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.md,
-  },
-  uploadText: {
-    ...typography.body,
-    color: colors.white,
-    fontFamily: typography.bodySemiBold.fontFamily,
   },
 });

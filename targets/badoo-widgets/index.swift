@@ -5,6 +5,7 @@ import SwiftUI
 struct BadooWidgetsBundle: WidgetBundle {
     var body: some Widget {
         BadooQuickActionsWidget()
+        BadooQuickActionsProgressWidget()
         BadooNutritionWidget()
     }
 }

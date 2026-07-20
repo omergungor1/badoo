@@ -65,22 +65,55 @@ ALTER TABLE badoo.foods
   ADD COLUMN IF NOT EXISTS unit_type text NOT NULL DEFAULT 'gram';
 
 ALTER TABLE badoo.food_logs
+  ADD COLUMN IF NOT EXISTS unit_type text NOT NULL DEFAULT 'gram';
+
+ALTER TABLE badoo.food_logs
   ALTER COLUMN quantity TYPE numeric USING quantity::numeric;
 
-UPDATE badoo.foods SET unit_type = 'adet', calories = 5, protein = 0, carbohydrates = 0, fats = 1
+ALTER TABLE badoo.foods DROP CONSTRAINT IF EXISTS foods_unit_type_check;
+ALTER TABLE badoo.food_logs DROP CONSTRAINT IF EXISTS food_logs_unit_type_check;
+
+UPDATE badoo.foods
+SET unit_type = CASE unit_type
+  WHEN 'adet' THEN 'piece'
+  WHEN 'bardak' THEN 'cup'
+  ELSE unit_type
+END;
+
+UPDATE badoo.food_logs
+SET unit_type = CASE unit_type
+  WHEN 'adet' THEN 'piece'
+  WHEN 'bardak' THEN 'cup'
+  ELSE unit_type
+END;
+
+UPDATE badoo.foods SET unit_type = 'piece', calories = 5, protein = 0, carbohydrates = 0, fats = 1
 WHERE food_name ILIKE '%zeytin%';
 
-UPDATE badoo.foods SET unit_type = 'adet'
+UPDATE badoo.foods SET unit_type = 'piece'
 WHERE food_name ILIKE '%(1 adet)%'
    OR food_name ILIKE '%(1 dilim)%'
    OR food_name ILIKE '%(1 porsiyon)%'
    OR food_name IN ('Yumurta', 'Muz', 'Avokado', 'Simit', 'Börek', 'Ekmek');
 
-UPDATE badoo.foods SET unit_type = 'bardak'
+UPDATE badoo.foods SET unit_type = 'cup'
 WHERE food_name ILIKE '%(1 bardak)%'
    OR food_name ILIKE '%(1 fincan)%'
    OR food_name ILIKE '%ayran%'
    OR food_name IN ('Ayran', 'Çay', 'Kahve');
+
+UPDATE badoo.food_logs AS fl
+SET unit_type = f.unit_type
+FROM badoo.foods AS f
+WHERE fl.food_id = f.id;
+
+ALTER TABLE badoo.foods
+  ADD CONSTRAINT foods_unit_type_check
+  CHECK (unit_type IN ('gram', 'piece', 'cup', 'ml', 'tbsp', 'slice'));
+
+ALTER TABLE badoo.food_logs
+  ADD CONSTRAINT food_logs_unit_type_check
+  CHECK (unit_type IN ('gram', 'piece', 'cup', 'ml', 'tbsp', 'slice'));
 
 -- 6) Yetkiler
 GRANT USAGE ON SCHEMA badoo TO anon, authenticated;
@@ -143,29 +176,29 @@ CREATE POLICY "foods_insert" ON badoo.foods
 -- 8) Türk yemekleri seed (tekrar çalıştırmada çoğaltmamak için kontrol)
 INSERT INTO badoo.foods (food_name, unit_type, calories, protein, carbohydrates, fats)
 SELECT * FROM (VALUES
-  ('Yumurta', 'adet', 78, 6, 1, 5),
+  ('Yumurta', 'piece', 78, 6, 1, 5),
   ('Menemen', 'gram', 180, 10, 8, 12),
   ('Mercimek Çorbası', 'gram', 150, 9, 20, 3),
   ('Kuru Fasulye', 'gram', 220, 12, 28, 6),
   ('Pilav', 'gram', 200, 4, 40, 3),
   ('Tavuk Göğsü', 'gram', 165, 31, 0, 4),
-  ('Ayran', 'bardak', 80, 4, 6, 3),
-  ('Muz', 'adet', 105, 1, 27, 0),
-  ('Avokado', 'adet', 160, 2, 9, 15),
-  ('Simit', 'adet', 280, 8, 50, 5),
-  ('Börek', 'adet', 320, 8, 30, 18),
+  ('Ayran', 'cup', 80, 4, 6, 3),
+  ('Muz', 'piece', 105, 1, 27, 0),
+  ('Avokado', 'piece', 160, 2, 9, 15),
+  ('Simit', 'piece', 280, 8, 50, 5),
+  ('Börek', 'piece', 320, 8, 30, 18),
   ('Köfte', 'gram', 250, 18, 5, 18),
   ('Cacık', 'gram', 90, 4, 6, 5),
   ('Salata (yeşil)', 'gram', 60, 2, 8, 2),
-  ('Zeytin', 'adet', 5, 0, 0, 1),
+  ('Zeytin', 'piece', 5, 0, 0, 1),
   ('Peynir', 'gram', 90, 6, 1, 7),
-  ('Ekmek', 'adet', 80, 3, 15, 1),
+  ('Ekmek', 'piece', 80, 3, 15, 1),
   ('Balık Izgara', 'gram', 170, 22, 0, 8),
   ('Makarna', 'gram', 180, 6, 35, 2),
   ('Yoğurt', 'gram', 90, 5, 7, 4),
   ('Çilek', 'gram', 32, 1, 8, 0),
-  ('Çay', 'bardak', 2, 0, 0, 0),
-  ('Kahve', 'bardak', 5, 0, 1, 0)
+  ('Çay', 'cup', 2, 0, 0, 0),
+  ('Kahve', 'cup', 5, 0, 1, 0)
 ) AS v(food_name, unit_type, calories, protein, carbohydrates, fats)
 WHERE NOT EXISTS (
   SELECT 1 FROM badoo.foods f WHERE f.food_name = v.food_name
@@ -838,3 +871,298 @@ CREATE POLICY "food_logs_friends_read" ON badoo.food_logs
   FOR SELECT TO authenticated
   USING (badoo.are_friends(auth.uid(), user_id) AND deleted_at IS NULL);
 
+-- 15) AI meal API: meals + food_logs ilişkisi ve İngilizce birimler
+CREATE TABLE IF NOT EXISTS badoo.meals (
+  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id uuid NOT NULL,
+  meal_title text,
+  source text NOT NULL CHECK (source IN ('image', 'voice', 'manual')),
+  raw_input text,
+  image_url text,
+  image_path text,
+  total_calories integer NOT NULL DEFAULT 0,
+  total_protein integer NOT NULL DEFAULT 0,
+  total_carbohydrates integer NOT NULL DEFAULT 0,
+  total_fats integer NOT NULL DEFAULT 0,
+  eaten_at timestamptz NOT NULL DEFAULT now(),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  deleted_at timestamptz
+);
+
+ALTER TABLE badoo.food_logs ADD COLUMN IF NOT EXISTS meal_id uuid;
+ALTER TABLE badoo.food_logs ADD COLUMN IF NOT EXISTS unit_type text NOT NULL DEFAULT 'gram';
+ALTER TABLE badoo.food_logs ADD COLUMN IF NOT EXISTS is_manual boolean NOT NULL DEFAULT false;
+ALTER TABLE badoo.food_logs ADD COLUMN IF NOT EXISTS food_name text;
+
+ALTER TABLE badoo.food_logs
+  DROP CONSTRAINT IF EXISTS food_logs_meal_id_fkey;
+
+ALTER TABLE badoo.food_logs
+  ADD CONSTRAINT food_logs_meal_id_fkey
+  FOREIGN KEY (meal_id) REFERENCES badoo.meals(id) ON DELETE CASCADE;
+
+GRANT SELECT, INSERT, UPDATE, DELETE ON badoo.meals TO authenticated;
+
+ALTER TABLE badoo.meals ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "meals_own" ON badoo.meals;
+CREATE POLICY "meals_own" ON badoo.meals
+  FOR ALL TO authenticated
+  USING (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);
+
+
+-- Besin hassasiyeti AI analizleri
+ALTER TABLE badoo.health_ai_analyses
+  ADD COLUMN IF NOT EXISTS analysis_type text NOT NULL DEFAULT 'general';
+
+ALTER TABLE badoo.health_ai_analyses
+  ADD COLUMN IF NOT EXISTS food_key text;
+
+ALTER TABLE badoo.health_ai_analyses
+  ADD COLUMN IF NOT EXISTS food_name text;
+
+UPDATE badoo.health_ai_analyses
+SET analysis_type = 'general'
+WHERE analysis_type IS NULL;
+
+CREATE INDEX IF NOT EXISTS health_ai_analyses_user_food_created_idx
+  ON badoo.health_ai_analyses (user_id, food_key, created_at DESC)
+  WHERE food_key IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS health_ai_analyses_user_type_created_idx
+  ON badoo.health_ai_analyses (user_id, analysis_type, created_at DESC);
+
+-- ============================================================
+-- Dr. Badoo Akademi
+-- ============================================================
+CREATE TABLE IF NOT EXISTS badoo.academy_series (
+  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  series_key text NOT NULL UNIQUE,
+  title text NOT NULL,
+  description text,
+  sort_order integer NOT NULL DEFAULT 0,
+  planned_lesson_count integer NOT NULL DEFAULT 0,
+  emoji text DEFAULT '📚',
+  is_active boolean NOT NULL DEFAULT true,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS badoo.academy_lessons (
+  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  series_id uuid NOT NULL REFERENCES badoo.academy_series(id) ON DELETE CASCADE,
+  day_number integer NOT NULL,
+  title text NOT NULL,
+  subtitle text,
+  cover_emoji text DEFAULT '🩺',
+  estimated_read_minutes integer NOT NULL DEFAULT 3,
+  difficulty text NOT NULL DEFAULT 'kolay',
+  content text NOT NULL,
+  summary text,
+  daily_task text,
+  tip_box text,
+  info_box text,
+  motivation text,
+  quiz jsonb DEFAULT NULL,
+  xp_reward integer NOT NULL DEFAULT 20,
+  badge_key text,
+  sort_order integer NOT NULL DEFAULT 0,
+  is_published boolean NOT NULL DEFAULT true,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (series_id, day_number)
+);
+
+CREATE TABLE IF NOT EXISTS badoo.academy_badges (
+  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  badge_key text NOT NULL UNIQUE,
+  title text NOT NULL,
+  description text,
+  emoji text DEFAULT '🏅',
+  unlock_type text NOT NULL DEFAULT 'manual',
+  unlock_value integer,
+  sort_order integer NOT NULL DEFAULT 0,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS badoo.academy_user_progress (
+  user_id uuid PRIMARY KEY,
+  total_xp integer NOT NULL DEFAULT 0,
+  current_streak integer NOT NULL DEFAULT 0,
+  longest_streak integer NOT NULL DEFAULT 0,
+  last_completed_date date,
+  completed_lesson_count integer NOT NULL DEFAULT 0,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS badoo.academy_user_lessons (
+  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id uuid NOT NULL,
+  lesson_id uuid NOT NULL REFERENCES badoo.academy_lessons(id) ON DELETE CASCADE,
+  xp_earned integer NOT NULL DEFAULT 0,
+  streak_bonus integer NOT NULL DEFAULT 0,
+  completed_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (user_id, lesson_id)
+);
+
+CREATE TABLE IF NOT EXISTS badoo.academy_user_badges (
+  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id uuid NOT NULL,
+  badge_id uuid NOT NULL REFERENCES badoo.academy_badges(id) ON DELETE CASCADE,
+  earned_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (user_id, badge_id)
+);
+
+CREATE INDEX IF NOT EXISTS academy_lessons_series_day_idx
+  ON badoo.academy_lessons (series_id, day_number);
+
+CREATE INDEX IF NOT EXISTS academy_user_lessons_user_idx
+  ON badoo.academy_user_lessons (user_id, completed_at DESC);
+
+CREATE INDEX IF NOT EXISTS academy_user_badges_user_idx
+  ON badoo.academy_user_badges (user_id, earned_at DESC);
+
+GRANT SELECT ON badoo.academy_series TO authenticated;
+GRANT SELECT ON badoo.academy_lessons TO authenticated;
+GRANT SELECT ON badoo.academy_badges TO authenticated;
+GRANT SELECT, INSERT, UPDATE ON badoo.academy_user_progress TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON badoo.academy_user_lessons TO authenticated;
+GRANT SELECT, INSERT, DELETE ON badoo.academy_user_badges TO authenticated;
+
+ALTER TABLE badoo.academy_user_progress ENABLE ROW LEVEL SECURITY;
+ALTER TABLE badoo.academy_user_lessons ENABLE ROW LEVEL SECURITY;
+ALTER TABLE badoo.academy_user_badges ENABLE ROW LEVEL SECURITY;
+ALTER TABLE badoo.academy_series ENABLE ROW LEVEL SECURITY;
+ALTER TABLE badoo.academy_lessons ENABLE ROW LEVEL SECURITY;
+ALTER TABLE badoo.academy_badges ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS academy_user_progress_own ON badoo.academy_user_progress;
+CREATE POLICY academy_user_progress_own ON badoo.academy_user_progress
+  FOR ALL TO authenticated USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS academy_user_lessons_own ON badoo.academy_user_lessons;
+CREATE POLICY academy_user_lessons_own ON badoo.academy_user_lessons
+  FOR ALL TO authenticated USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS academy_user_badges_own ON badoo.academy_user_badges;
+CREATE POLICY academy_user_badges_own ON badoo.academy_user_badges
+  FOR ALL TO authenticated USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS academy_series_read ON badoo.academy_series;
+CREATE POLICY academy_series_read ON badoo.academy_series FOR SELECT TO authenticated USING (true);
+
+DROP POLICY IF EXISTS academy_lessons_read ON badoo.academy_lessons;
+CREATE POLICY academy_lessons_read ON badoo.academy_lessons FOR SELECT TO authenticated USING (is_published = true);
+
+DROP POLICY IF EXISTS academy_badges_read ON badoo.academy_badges;
+CREATE POLICY academy_badges_read ON badoo.academy_badges FOR SELECT TO authenticated USING (true);
+
+-- ─── Dr. Badoo Laboratuvarı (eliminasyon) ───
+CREATE TABLE IF NOT EXISTS badoo.elimination_sessions (
+  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id uuid NOT NULL,
+  program_slug text NOT NULL,
+  status text NOT NULL DEFAULT 'active'
+    CHECK (status IN ('active', 'reintroduction', 'completed', 'broken', 'cancelled')),
+  start_date date NOT NULL DEFAULT (CURRENT_DATE),
+  current_day integer NOT NULL DEFAULT 1,
+  ended_at timestamptz,
+  break_food text,
+  break_amount text,
+  break_intent text,
+  break_note text,
+  reintroduction_started_at timestamptz,
+  reintroduction_food text,
+  reintroduction_amount text,
+  result_summary text,
+  result_likelihood text,
+  result_payload jsonb,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS elimination_sessions_one_open
+  ON badoo.elimination_sessions (user_id)
+  WHERE status IN ('active', 'reintroduction');
+
+CREATE INDEX IF NOT EXISTS elimination_sessions_user_idx
+  ON badoo.elimination_sessions (user_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS badoo.elimination_symptom_logs (
+  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  session_id uuid NOT NULL REFERENCES badoo.elimination_sessions(id) ON DELETE CASCADE,
+  user_id uuid NOT NULL,
+  log_date date NOT NULL,
+  day_number integer,
+  phase text NOT NULL DEFAULT 'elimination'
+    CHECK (phase IN ('elimination', 'reintroduction')),
+  scores jsonb NOT NULL DEFAULT '{}'::jsonb,
+  cheated boolean NOT NULL DEFAULT false,
+  cheat_note text,
+  note text,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (session_id, log_date, phase)
+);
+
+CREATE INDEX IF NOT EXISTS elimination_symptom_logs_session_idx
+  ON badoo.elimination_symptom_logs (session_id, log_date);
+
+CREATE TABLE IF NOT EXISTS badoo.elimination_cheat_logs (
+  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  session_id uuid NOT NULL REFERENCES badoo.elimination_sessions(id) ON DELETE CASCADE,
+  user_id uuid NOT NULL,
+  log_date date NOT NULL DEFAULT (CURRENT_DATE),
+  food_text text,
+  amount_text text,
+  intent text,
+  note text,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS elimination_cheat_logs_session_idx
+  ON badoo.elimination_cheat_logs (session_id, created_at DESC);
+
+GRANT SELECT, INSERT, UPDATE, DELETE ON badoo.elimination_sessions TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON badoo.elimination_symptom_logs TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON badoo.elimination_cheat_logs TO authenticated;
+
+ALTER TABLE badoo.elimination_sessions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE badoo.elimination_symptom_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE badoo.elimination_cheat_logs ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS elimination_sessions_own ON badoo.elimination_sessions;
+CREATE POLICY elimination_sessions_own ON badoo.elimination_sessions
+  FOR ALL TO authenticated USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS elimination_symptom_logs_own ON badoo.elimination_symptom_logs;
+CREATE POLICY elimination_symptom_logs_own ON badoo.elimination_symptom_logs
+  FOR ALL TO authenticated USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS elimination_cheat_logs_own ON badoo.elimination_cheat_logs;
+CREATE POLICY elimination_cheat_logs_own ON badoo.elimination_cheat_logs
+  FOR ALL TO authenticated USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+
+-- Sindirim check-in (günde max 2)
+CREATE TABLE IF NOT EXISTS badoo.digestion_checkins (
+  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id uuid NOT NULL,
+  checkin_date date NOT NULL,
+  time_of_day text NOT NULL CHECK (time_of_day IN ('morning', 'afternoon')),
+  feeling_ok boolean NOT NULL DEFAULT false,
+  symptoms jsonb NOT NULL DEFAULT '[]'::jsonb,
+  follow_up jsonb,
+  note text,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS digestion_checkins_user_date_idx
+  ON badoo.digestion_checkins (user_id, checkin_date DESC, created_at DESC);
+
+GRANT SELECT, INSERT, UPDATE, DELETE ON badoo.digestion_checkins TO authenticated;
+
+ALTER TABLE badoo.digestion_checkins ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS digestion_checkins_own ON badoo.digestion_checkins;
+CREATE POLICY digestion_checkins_own ON badoo.digestion_checkins
+  FOR ALL TO authenticated USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);

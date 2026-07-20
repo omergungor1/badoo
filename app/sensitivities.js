@@ -1,90 +1,46 @@
-import { useCallback, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { useFocusEffect, useRouter } from 'expo-router';
+import { useCallback, useMemo, useState } from 'react';
+import { Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useFocusEffect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { PRESET_SENSITIVITIES } from '../constants/sensitivities';
 import { useAuth } from '../context/AuthContext';
 import {
   addSensitivity,
   deleteSensitivity,
   getSensitivities,
-  updateSensitivity,
 } from '../services/profileService';
 import BackButton from '../components/ui/BackButton';
 import Button from '../components/ui/Button';
 import Card from '../components/ui/Card';
+import Chip from '../components/ui/Chip';
 import Input from '../components/ui/Input';
 import SectionTitle from '../components/ui/SectionTitle';
+import SwipeToDeleteRow from '../components/ui/SwipeToDeleteRow';
 import { colors, spacing, typography } from '../theme';
 
-function SensitivityRow({ item, onUpdate, onDelete }) {
-  const [editing, setEditing] = useState(false);
-  const [name, setName] = useState(item.sensitivity_name);
-  const [loading, setLoading] = useState(false);
+function normalizeName(value) {
+  return String(value || '').trim().toLocaleLowerCase('tr-TR');
+}
 
-  async function handleSave() {
-    const trimmed = name.trim();
-    if (!trimmed) {
-      Alert.alert('Hata', 'Hassasiyet adı boş olamaz.');
-      return;
-    }
-
-    if (trimmed === item.sensitivity_name) {
-      setEditing(false);
-      return;
-    }
-
-    setLoading(true);
-    const { error } = await onUpdate(item.id, trimmed);
-    setLoading(false);
-
-    if (error) {
-      Alert.alert('Hata', error.message);
-      return;
-    }
-
-    setEditing(false);
-  }
-
-  function handleCancel() {
-    setName(item.sensitivity_name);
-    setEditing(false);
-  }
-
-  if (editing) {
-    return (
-      <Card style={styles.rowCard}>
-        <Input value={name} onChangeText={setName} placeholder="Hassasiyet adı" />
-        <View style={styles.rowActions}>
-          <Button title="Vazgeç" variant="outline" onPress={handleCancel} style={styles.actionBtn} />
-          <Button title="Kaydet" onPress={handleSave} loading={loading} style={styles.actionBtn} />
-        </View>
-      </Card>
-    );
-  }
-
+function SensitivityRow({ item }) {
   return (
     <Card style={styles.rowCard}>
-      <View style={styles.rowHeader}>
-        <Text style={styles.rowName}>{item.sensitivity_name}</Text>
-        <View style={styles.rowActions}>
-          <Pressable onPress={() => setEditing(true)} hitSlop={8}>
-            <Text style={styles.link}>Düzenle</Text>
-          </Pressable>
-          <Pressable onPress={() => onDelete(item)} hitSlop={8}>
-            <Text style={styles.danger}>Sil</Text>
-          </Pressable>
-        </View>
-      </View>
+      <Text style={styles.rowName}>{item.sensitivity_name}</Text>
     </Card>
   );
 }
 
 export default function SensitivitiesScreen() {
   const { user } = useAuth();
-  const router = useRouter();
   const [sensitivities, setSensitivities] = useState([]);
   const [newName, setNewName] = useState('');
   const [adding, setAdding] = useState(false);
+  const [addingPreset, setAddingPreset] = useState(null);
+
+  const availablePresets = useMemo(() => {
+    const owned = new Set(sensitivities.map((item) => normalizeName(item.sensitivity_name)));
+    return PRESET_SENSITIVITIES.filter((name) => !owned.has(normalizeName(name)));
+  }, [sensitivities]);
 
   const loadSensitivities = useCallback(async () => {
     if (!user?.id) return;
@@ -104,51 +60,48 @@ export default function SensitivitiesScreen() {
     }, [loadSensitivities]),
   );
 
-  async function handleAdd() {
-    if (!user?.id) return;
+  async function addByName(name) {
+    if (!user?.id) return null;
 
-    const trimmed = newName.trim();
+    const trimmed = name.trim();
     if (!trimmed) {
       Alert.alert('Hata', 'Hassasiyet adı girin.');
-      return;
+      return null;
     }
 
     const exists = sensitivities.some(
-      (item) => item.sensitivity_name.toLowerCase() === trimmed.toLowerCase(),
+      (item) => normalizeName(item.sensitivity_name) === normalizeName(trimmed),
     );
     if (exists) {
       Alert.alert('Hata', 'Bu hassasiyet zaten listede.');
-      return;
+      return null;
     }
 
-    setAdding(true);
     const { data, error } = await addSensitivity(user.id, trimmed);
-    setAdding(false);
-
     if (error) {
       Alert.alert('Hata', error.message);
-      return;
+      return null;
     }
 
-    setNewName('');
     setSensitivities((prev) =>
       [...prev, data].sort((a, b) => a.sensitivity_name.localeCompare(b.sensitivity_name, 'tr')),
     );
+    return data;
   }
 
-  async function handleUpdate(sensitivityId, sensitivityName) {
-    if (!user?.id) return { error: { message: 'Oturum bulunamadı.' } };
+  async function handleAdd() {
+    setAdding(true);
+    const data = await addByName(newName);
+    setAdding(false);
+    if (data) setNewName('');
+  }
 
-    const { data, error } = await updateSensitivity(user.id, sensitivityId, sensitivityName);
-    if (!error && data) {
-      setSensitivities((prev) =>
-        prev
-          .map((item) => (item.id === sensitivityId ? data : item))
-          .sort((a, b) => a.sensitivity_name.localeCompare(b.sensitivity_name, 'tr')),
-      );
-    }
+  async function handlePresetAdd(name) {
+    if (addingPreset) return;
 
-    return { error };
+    setAddingPreset(name);
+    await addByName(name);
+    setAddingPreset(null);
   }
 
   function confirmDelete(item) {
@@ -184,7 +137,27 @@ export default function SensitivitiesScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
-        <SectionTitle title="Yeni Hassasiyet" subtitle="Listeye eklemek için adı yazın" />
+        {availablePresets.length ? (
+          <>
+            <SectionTitle
+              title="Hazır Hassasiyetler"
+              subtitle="Dokunarak hızlıca ekle"
+            />
+            <Card>
+              <View style={styles.chips}>
+                {availablePresets.map((name) => (
+                  <Chip
+                    key={name}
+                    label={addingPreset === name ? 'Ekleniyor…' : `+ ${name}`}
+                    onPress={() => handlePresetAdd(name)}
+                  />
+                ))}
+              </View>
+            </Card>
+          </>
+        ) : null}
+
+        <SectionTitle title="Yeni Hassasiyet" subtitle="Listede yoksa adını yazarak ekle" />
         <Card>
           <Input
             label="Hassasiyet adı"
@@ -205,18 +178,17 @@ export default function SensitivitiesScreen() {
         />
 
         {sensitivities.length ? (
-          sensitivities.map((item) => (
-            <SensitivityRow
-              key={item.id}
-              item={item}
-              onUpdate={handleUpdate}
-              onDelete={confirmDelete}
-            />
-          ))
+          <View style={styles.list}>
+            {sensitivities.map((item) => (
+              <SwipeToDeleteRow key={item.id} onDelete={() => confirmDelete(item)}>
+                <SensitivityRow item={item} />
+              </SwipeToDeleteRow>
+            ))}
+          </View>
         ) : (
           <Card>
             <Text style={styles.empty}>
-              Kayıtlı hassasiyet yok. Yukarıdan yeni hassasiyet ekleyebilirsiniz.
+              Kayıtlı hassasiyet yok. Yukarıdaki hazır listeden seçebilir veya yeni hassasiyet ekleyebilirsin.
             </Text>
           </Card>
         )}
@@ -237,18 +209,16 @@ const styles = StyleSheet.create({
   },
   headerTitle: { ...typography.headingMedium, color: colors.textPrimary, flex: 1 },
   content: { padding: spacing.lg, gap: spacing.md, paddingBottom: spacing.xxl },
-  addBtn: { marginTop: spacing.sm },
-  rowCard: { gap: spacing.sm },
-  rowHeader: {
+  chips: {
     flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: spacing.md,
+    flexWrap: 'wrap',
+    gap: spacing.sm,
   },
-  rowName: { ...typography.body, color: colors.textPrimary, flex: 1 },
-  rowActions: { flexDirection: 'row', gap: spacing.md, alignItems: 'center' },
-  actionBtn: { flex: 1 },
-  link: { ...typography.bodySmall, color: colors.primary, fontWeight: '600' },
-  danger: { ...typography.bodySmall, color: colors.danger, fontWeight: '600' },
+  addBtn: { marginTop: spacing.sm },
+  list: { gap: spacing.sm },
+  rowCard: {
+    paddingVertical: spacing.md,
+  },
+  rowName: { ...typography.body, color: colors.textPrimary },
   empty: { ...typography.body, color: colors.textSecondary },
 });

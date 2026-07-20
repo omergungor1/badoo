@@ -21,6 +21,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Button from '../ui/Button';
 import {
   createHealthAnalysis,
+  getHealthAnalyses,
   getHealthAnalysisPreview,
 } from '../../services/healthAiAnalysisService';
 import { ANALYSIS_PERIOD_DAYS } from '../../utils/healthAiPayload';
@@ -133,7 +134,7 @@ function AnalysisListItem({ item, onPress, isLast }) {
       ]}
     >
       <View style={styles.listIcon}>
-        <Ionicons name="sparkles-outline" size={18} color={colors.primary} />
+        <Ionicons name="document-text-outline" size={18} color={colors.primary} />
       </View>
       <View style={styles.listContent}>
         <Text style={styles.listTitle} numberOfLines={1}>
@@ -159,13 +160,17 @@ export default function HealthAiAnalysisSection({ userId, analyses = [], onCreat
   const insets = useSafeAreaInsets();
   const scrollRef = useRef(null);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [historyItems, setHistoryItems] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
   const [preview, setPreview] = useState(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [note, setNote] = useState('');
   const [creating, setCreating] = useState(false);
   const [statusIndex, setStatusIndex] = useState(0);
 
-  const recentAnalyses = analyses.slice(0, 3);
+  const latestAnalysis = analyses[0] || null;
+  const hasHistory = analyses.length > 1;
 
   const closeSheet = useCallback(() => {
     setSheetOpen(false);
@@ -183,6 +188,21 @@ export default function HealthAiAnalysisSection({ userId, analyses = [], onCreat
     setPreview(data || null);
     setPreviewLoading(false);
   }, [userId]);
+
+  const openHistory = useCallback(async () => {
+    if (!userId) return;
+
+    setHistoryOpen(true);
+    setHistoryLoading(true);
+
+    const { data } = await getHealthAnalyses(userId, 20);
+    setHistoryItems(data?.length ? data : analyses);
+    setHistoryLoading(false);
+  }, [userId, analyses]);
+
+  const closeHistory = useCallback(() => {
+    setHistoryOpen(false);
+  }, []);
 
   useEffect(() => {
     if (!creating) return undefined;
@@ -217,48 +237,124 @@ export default function HealthAiAnalysisSection({ userId, analyses = [], onCreat
     router.push(`/ai-analysis/${data.id}`);
   }
 
+  function openAnalysis(id) {
+    setHistoryOpen(false);
+    router.push(`/ai-analysis/${id}`);
+  }
+
   return (
     <>
       <View style={styles.card}>
-        <View style={styles.header}>
-          <View style={styles.headerText}>
-            <View style={styles.titleRow}>
-              <Ionicons name="sparkles" size={18} color={colors.primary} />
-              <Text style={styles.title}>AI Sağlık Analizi</Text>
-            </View>
-            <Text style={styles.subtitle}>
-              Son analizlerini görüntüle veya yeni bir AI değerlendirmesi başlat.
-            </Text>
+        <View style={styles.headerText}>
+          <View style={styles.titleRow}>
+            <Ionicons name="sparkles" size={18} color={colors.primary} />
+            <Text style={styles.title}>AI Sağlık Analizi</Text>
           </View>
-
-          <Pressable
-            onPress={openSheet}
-            style={({ pressed }) => [styles.addBtn, pressed && styles.addBtnPressed]}
-          >
-            <Ionicons name="add" size={26} color={colors.white} />
-          </Pressable>
+          <Text style={styles.subtitle}>
+            Son {ANALYSIS_PERIOD_DAYS} günlük kayıtlarından kişisel bir değerlendirme al.
+          </Text>
         </View>
 
-        {recentAnalyses.length ? (
-          <View style={styles.list}>
-            {recentAnalyses.map((item, index) => (
-              <AnalysisListItem
-                key={item.id}
-                item={item}
-                isLast={index === recentAnalyses.length - 1}
-                onPress={() => router.push(`/ai-analysis/${item.id}`)}
-              />
-            ))}
-          </View>
+        <Pressable
+          onPress={openSheet}
+          style={({ pressed }) => [styles.primaryCta, pressed && styles.primaryCtaPressed]}
+        >
+          <Ionicons name="sparkles" size={18} color={colors.white} />
+          <Text style={styles.primaryCtaText}>Yeni analiz başlat</Text>
+        </Pressable>
+
+        {latestAnalysis ? (
+          <Pressable
+            onPress={() => openAnalysis(latestAnalysis.id)}
+            style={({ pressed }) => [styles.latestCard, pressed && styles.latestCardPressed]}
+          >
+            <View style={styles.latestBadge}>
+              <Text style={styles.latestBadgeText}>Son analiz</Text>
+            </View>
+            <Text style={styles.latestTitle} numberOfLines={1}>
+              {latestAnalysis.title}
+            </Text>
+            <Text style={styles.latestMeta}>
+              {formatDate(latestAnalysis.created_at)} · {formatShortDate(latestAnalysis.period_start)} –{' '}
+              {formatShortDate(latestAnalysis.period_end)}
+            </Text>
+            {latestAnalysis.summary ? (
+              <Text style={styles.latestSummary} numberOfLines={2}>
+                {latestAnalysis.summary}
+              </Text>
+            ) : null}
+            <View style={styles.latestAction}>
+              <Text style={styles.latestActionText}>Analizi aç</Text>
+              <Ionicons name="chevron-forward" size={16} color={colors.primary} />
+            </View>
+          </Pressable>
         ) : (
           <View style={styles.emptyState}>
             <Text style={styles.emptyTitle}>Henüz analiz yok</Text>
             <Text style={styles.emptyText}>
-              + butonuna basarak ilk AI sağlık analizini oluşturabilirsin.
+              İlk analizinizi başlatarak öğün, belirti ve günlük verilerinizin özetini alın.
             </Text>
           </View>
         )}
+
+        {hasHistory ? (
+          <Pressable
+            onPress={openHistory}
+            style={({ pressed }) => [styles.historyBtn, pressed && styles.historyBtnPressed]}
+          >
+            <Ionicons name="time-outline" size={18} color={colors.textPrimary} />
+            <Text style={styles.historyBtnText}>Geçmiş analizler</Text>
+            <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
+          </Pressable>
+        ) : null}
       </View>
+
+      <Modal
+        visible={historyOpen}
+        transparent
+        animationType="slide"
+        onRequestClose={closeHistory}
+      >
+        <View style={styles.sheetBackdrop}>
+          <Pressable style={styles.sheetDismissArea} onPress={closeHistory} />
+          <View style={[styles.sheet, { paddingBottom: insets.bottom + spacing.md, maxHeight: SHEET_MAX_HEIGHT }]}>
+            <View style={styles.sheetHandle} />
+            <View style={styles.historyHeader}>
+              <Text style={styles.sheetTitle}>Geçmiş analizler</Text>
+              <Pressable onPress={closeHistory} hitSlop={10} style={styles.historyClose}>
+                <Ionicons name="close" size={22} color={colors.textSecondary} />
+              </Pressable>
+            </View>
+            <Text style={styles.sheetSubtitle}>
+              Önceki AI değerlendirmelerine buradan ulaşabilirsin.
+            </Text>
+
+            {historyLoading ? (
+              <View style={styles.previewLoading}>
+                <ActivityIndicator color={colors.primary} />
+                <Text style={styles.previewLoadingText}>Yükleniyor...</Text>
+              </View>
+            ) : (
+              <ScrollView
+                style={styles.sheetScroll}
+                contentContainerStyle={styles.historyList}
+                showsVerticalScrollIndicator={false}
+              >
+                <View style={styles.list}>
+                  {historyItems.map((item, index) => (
+                    <AnalysisListItem
+                      key={item.id}
+                      item={item}
+                      isLast={index === historyItems.length - 1}
+                      onPress={() => openAnalysis(item.id)}
+                    />
+                  ))}
+                </View>
+              </ScrollView>
+            )}
+          </View>
+        </View>
+      </Modal>
 
       <Modal
         visible={sheetOpen}
@@ -347,20 +443,14 @@ export default function HealthAiAnalysisSection({ userId, analyses = [], onCreat
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: '#F7F8FC',
+    backgroundColor: colors.background,
     borderRadius: radius.lg,
     borderWidth: 1,
-    borderColor: '#E4E8F2',
+    borderColor: colors.border,
     padding: spacing.md,
     gap: spacing.md,
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: spacing.md,
-  },
   headerText: {
-    flex: 1,
     gap: 4,
   },
   titleRow: {
@@ -378,22 +468,93 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     lineHeight: 19,
   },
-  addBtn: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
+  primaryCta: {
+    minHeight: 48,
+    borderRadius: radius.lg,
     backgroundColor: colors.primary,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.14,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 4,
+    gap: spacing.sm,
+    paddingHorizontal: spacing.lg,
   },
-  addBtnPressed: {
-    opacity: 0.9,
-    transform: [{ scale: 0.97 }],
+  primaryCtaPressed: {
+    backgroundColor: colors.primaryDark,
+  },
+  primaryCtaText: {
+    ...typography.bodySemiBold,
+    color: colors.white,
+    fontSize: 15,
+  },
+  latestCard: {
+    backgroundColor: colors.white,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.md,
+    gap: 4,
+  },
+  latestCardPressed: {
+    backgroundColor: colors.primaryLight,
+  },
+  latestBadge: {
+    alignSelf: 'flex-start',
+    backgroundColor: colors.primaryLight,
+    borderRadius: radius.full,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    marginBottom: 4,
+  },
+  latestBadgeText: {
+    ...typography.caption,
+    color: colors.textPrimary,
+    fontFamily: typography.bodySemiBold.fontFamily,
+  },
+  latestTitle: {
+    ...typography.bodySemiBold,
+    color: colors.textPrimary,
+    fontSize: 15,
+  },
+  latestMeta: {
+    ...typography.caption,
+    color: colors.textSecondary,
+  },
+  latestSummary: {
+    ...typography.caption,
+    color: colors.textMuted,
+    lineHeight: 16,
+    marginTop: 2,
+  },
+  latestAction: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    marginTop: spacing.xs,
+  },
+  latestActionText: {
+    ...typography.bodySmall,
+    color: colors.primary,
+    fontFamily: typography.bodySemiBold.fontFamily,
+  },
+  historyBtn: {
+    minHeight: 44,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.white,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.md,
+    gap: spacing.sm,
+  },
+  historyBtnPressed: {
+    backgroundColor: colors.primaryLight,
+  },
+  historyBtnText: {
+    ...typography.bodySmall,
+    color: colors.textPrimary,
+    fontFamily: typography.bodySemiBold.fontFamily,
+    flex: 1,
   },
   list: {
     backgroundColor: colors.white,
@@ -420,7 +581,7 @@ const styles = StyleSheet.create({
     width: 34,
     height: 34,
     borderRadius: 17,
-    backgroundColor: '#F0F2F8',
+    backgroundColor: colors.primaryLight,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -494,10 +655,23 @@ const styles = StyleSheet.create({
     backgroundColor: colors.border,
     marginBottom: spacing.xs,
   },
+  historyHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.md,
+  },
+  historyClose: {
+    padding: 2,
+  },
+  historyList: {
+    paddingBottom: spacing.md,
+  },
   sheetTitle: {
     ...typography.bodySemiBold,
     fontSize: 20,
     color: colors.textPrimary,
+    flex: 1,
   },
   sheetSubtitle: {
     ...typography.bodySmall,
@@ -505,12 +679,12 @@ const styles = StyleSheet.create({
     marginTop: -6,
   },
   previewBox: {
-    backgroundColor: '#F4F6FB',
+    backgroundColor: colors.background,
     borderRadius: radius.md,
     padding: spacing.md,
     gap: spacing.sm,
     borderWidth: 1,
-    borderColor: '#E2E7F1',
+    borderColor: colors.border,
   },
   previewTitle: {
     ...typography.body,

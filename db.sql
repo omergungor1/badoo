@@ -43,7 +43,7 @@ create table badoo.food_sensitivities (
 create table badoo.foods (
   id uuid primary key default uuid_generate_v4(),
   food_name text,
-  unit_type text not null default 'gram',
+  unit_type text not null default 'gram' check (unit_type in ('gram', 'piece', 'cup', 'ml', 'tbsp', 'slice')),
   calories integer,
   protein integer,
   carbohydrates integer,
@@ -56,6 +56,10 @@ create table badoo.food_logs (
   food_id uuid references badoo.foods(id) on delete cascade,
   quantity numeric,
   meal_title text,
+  meal_id uuid,
+  unit_type text not null default 'gram' check (unit_type in ('gram', 'piece', 'cup', 'ml', 'tbsp', 'slice')),
+  is_manual boolean not null default false,
+  food_name text,
   image_url text,
   image_path text,
   calories integer,
@@ -66,8 +70,33 @@ create table badoo.food_logs (
   deleted_at timestamptz
 );
 
-create table badoo.water_logs (
+create table if not exists badoo.meals (
   id uuid primary key default uuid_generate_v4(),
+  user_id uuid not null,
+  meal_title text,                     -- "Kahvaltı", "Öğle Yemeği" vs. AI ya da kullanıcı belirleyebilir
+  source text not null,                -- 'image' | 'voice' | 'manual'
+  raw_input text,                      -- ses transkripti (voice için)
+  image_url text,                      -- resim analizi ise
+  image_path text,
+  total_calories integer not null default 0,
+  total_protein integer not null default 0,
+  total_carbohydrates integer not null default 0,
+  total_fats integer not null default 0,
+  eaten_at timestamptz not null default now(),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  deleted_at timestamptz
+);
+
+alter table badoo.food_logs
+  drop constraint if exists food_logs_meal_id_fkey;
+
+alter table badoo.food_logs
+  add constraint food_logs_meal_id_fkey
+  foreign key (meal_id) references badoo.meals(id) on delete cascade;
+
+create table badoo.water_logs (
+  id uuid primary key default uuid_generate_v4(), 
   user_id uuid,
   amount integer,
   timestamp timestamptz
@@ -285,6 +314,9 @@ create table badoo.health_ai_analyses (
   period_end date not null,
   model text default 'gpt-4o-mini',
   status text not null default 'completed',
+  analysis_type text not null default 'general',
+  food_key text,
+  food_name text,
   created_at timestamptz default now()
 );
 
@@ -297,3 +329,145 @@ create table badoo.health_ai_analyses (
 -- GRANT SELECT, INSERT, UPDATE, DELETE ON badoo.period_symptom_options TO anon, authenticated, service_role;
 -- GRANT SELECT, INSERT, UPDATE, DELETE ON badoo.period_cycles TO anon, authenticated, service_role;
 -- GRANT SELECT, INSERT, UPDATE, DELETE ON badoo.period_logs TO anon, authenticated, service_role;
+
+
+
+-- Dr. Badoo Akademi
+create table badoo.academy_series (
+  id uuid primary key default uuid_generate_v4(),
+  series_key text not null unique,
+  title text not null,
+  description text,
+  sort_order integer not null default 0,
+  planned_lesson_count integer not null default 0,
+  emoji text default '📚',
+  is_active boolean not null default true,
+  created_at timestamptz not null default now()
+);
+
+create table badoo.academy_lessons (
+  id uuid primary key default uuid_generate_v4(),
+  series_id uuid not null references badoo.academy_series(id) on delete cascade,
+  day_number integer not null,
+  title text not null,
+  subtitle text,
+  cover_emoji text default '🩺',
+  estimated_read_minutes integer not null default 3,
+  difficulty text not null default 'kolay',
+  content text not null,
+  summary text,
+  daily_task text,
+  tip_box text,
+  info_box text,
+  motivation text,
+  quiz jsonb default null,
+  xp_reward integer not null default 20,
+  badge_key text,
+  sort_order integer not null default 0,
+  is_published boolean not null default true,
+  created_at timestamptz not null default now(),
+  unique (series_id, day_number)
+);
+
+create table badoo.academy_badges (
+  id uuid primary key default uuid_generate_v4(),
+  badge_key text not null unique,
+  title text not null,
+  description text,
+  emoji text default '🏅',
+  unlock_type text not null default 'manual',
+  unlock_value integer,
+  sort_order integer not null default 0,
+  created_at timestamptz not null default now()
+);
+
+create table badoo.academy_user_progress (
+  user_id uuid primary key,
+  total_xp integer not null default 0,
+  current_streak integer not null default 0,
+  longest_streak integer not null default 0,
+  last_completed_date date,
+  completed_lesson_count integer not null default 0,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table badoo.academy_user_lessons (
+  id uuid primary key default uuid_generate_v4(),
+  user_id uuid not null,
+  lesson_id uuid not null references badoo.academy_lessons(id) on delete cascade,
+  xp_earned integer not null default 0,
+  streak_bonus integer not null default 0,
+  completed_at timestamptz not null default now(),
+  unique (user_id, lesson_id)
+);
+
+create table badoo.academy_user_badges (
+  id uuid primary key default uuid_generate_v4(),
+  user_id uuid not null,
+  badge_id uuid not null references badoo.academy_badges(id) on delete cascade,
+  earned_at timestamptz not null default now(),
+  unique (user_id, badge_id)
+);
+
+-- Dr. Badoo Laboratuvarı
+create table badoo.elimination_sessions (
+  id uuid primary key default uuid_generate_v4(),
+  user_id uuid not null,
+  program_slug text not null,
+  status text not null default 'active',
+  start_date date not null default (current_date),
+  current_day integer not null default 1,
+  ended_at timestamptz,
+  break_food text,
+  break_amount text,
+  break_intent text,
+  break_note text,
+  reintroduction_started_at timestamptz,
+  reintroduction_food text,
+  reintroduction_amount text,
+  result_summary text,
+  result_likelihood text,
+  result_payload jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table badoo.elimination_symptom_logs (
+  id uuid primary key default uuid_generate_v4(),
+  session_id uuid not null references badoo.elimination_sessions(id) on delete cascade,
+  user_id uuid not null,
+  log_date date not null,
+  day_number integer,
+  phase text not null default 'elimination',
+  scores jsonb not null default '{}'::jsonb,
+  cheated boolean not null default false,
+  cheat_note text,
+  note text,
+  created_at timestamptz not null default now(),
+  unique (session_id, log_date, phase)
+);
+
+create table badoo.elimination_cheat_logs (
+  id uuid primary key default uuid_generate_v4(),
+  session_id uuid not null references badoo.elimination_sessions(id) on delete cascade,
+  user_id uuid not null,
+  log_date date not null default (current_date),
+  food_text text,
+  amount_text text,
+  intent text,
+  note text,
+  created_at timestamptz not null default now()
+);
+
+create table badoo.digestion_checkins (
+  id uuid primary key default uuid_generate_v4(),
+  user_id uuid not null,
+  checkin_date date not null,
+  time_of_day text not null,
+  feeling_ok boolean not null default false,
+  symptoms jsonb not null default '[]'::jsonb,
+  follow_up jsonb,
+  note text,
+  created_at timestamptz not null default now()
+);

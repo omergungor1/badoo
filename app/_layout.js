@@ -9,8 +9,11 @@ import {
   NunitoSans_600SemiBold,
   NunitoSans_700Bold,
 } from '@expo-google-fonts/nunito-sans';
+import DigestionCheckinModal from '../components/checkin/DigestionCheckinModal';
 import SplashView from '../components/ui/SplashView';
+import Toast from '../components/ui/Toast';
 import { AuthProvider, useAuth } from '../context/AuthContext';
+import { useDigestionCheckin } from '../hooks/useDigestionCheckin';
 import { usePushNotifications } from '../hooks/usePushNotifications';
 import { colors } from '../theme';
 
@@ -47,18 +50,32 @@ function useProtectedRoute() {
 }
 
 function RootLayoutNav() {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
+  const checkinEnabled = Boolean(user?.id && profile?.onboarding_completed);
+  const checkin = useDigestionCheckin(user?.id, checkinEnabled);
 
   useProtectedRoute();
   usePushNotifications(user?.id);
 
   return (
-    <Stack
-      screenOptions={{
-        headerShown: false,
-        contentStyle: { backgroundColor: colors.background },
-      }}
-    />
+    <>
+      <Stack
+        screenOptions={{
+          headerShown: false,
+          contentStyle: { backgroundColor: colors.background },
+        }}
+      />
+
+      <DigestionCheckinModal
+        visible={checkin.visible}
+        timeOfDay={checkin.timeOfDay}
+        saving={checkin.saving}
+        onDismiss={checkin.dismiss}
+        onSave={checkin.save}
+      />
+
+      <Toast message={checkin.toastMessage} onHide={checkin.clearToast} />
+    </>
   );
 }
 

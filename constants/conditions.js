@@ -1,0 +1,16 @@
+export const PRESET_CONDITIONS = [
+  'IBS',
+  'Crohn',
+  'Ülseratif Kolit',
+  'Çölyak',
+  'Gastrit',
+  'Reflü',
+  'Diyabet',
+  'Hashimoto',
+  'PCOS',
+  'Migren',
+  'Egzama',
+  'Astım',
+  'Anksiyete',
+  'Depresyon',
+];

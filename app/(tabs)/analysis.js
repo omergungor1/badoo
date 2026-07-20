@@ -1,8 +1,11 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import HealthAiAnalysisSection from '../../components/analysis/HealthAiAnalysisSection';
+import LabHeroCard from '../../components/elimination/LabHeroCard';
+import FoodSensitivityAiSheet from '../../components/sensitivity/FoodSensitivityAiSheet';
 import FoodSensitivityCard from '../../components/sensitivity/FoodSensitivityCard';
 import Card from '../../components/ui/Card';
 import ScoreGrid, { ScoreGridSummary } from '../../components/ui/ScoreGrid';
@@ -11,9 +14,12 @@ import { useAuth } from '../../context/AuthContext';
 import { getLogsForDate } from '../../services/logService';
 import { getUserFoodSensitivityInsights } from '../../services/foodSensitivityService';
 import { getHealthAnalyses } from '../../services/healthAiAnalysisService';
+import { getActiveEliminationSession } from '../../services/eliminationService';
 import { getLastNDays } from '../../utils/date';
 import { calculateDailyDigestionScore } from '../../utils/digestionScore';
-import { colors, spacing, typography } from '../../theme';
+import { colors, radius, spacing, typography } from '../../theme';
+
+const PREVIEW_SCORE_LIMIT = 3;
 
 export default function AnalysisScreen() {
   const { user } = useAuth();
@@ -22,19 +28,36 @@ export default function AnalysisScreen() {
   const [meta, setMeta] = useState({ days: 90, mealLogs: 0, symptomLogs: 0 });
   const [analyses, setAnalyses] = useState([]);
   const [digestionScores, setDigestionScores] = useState([]);
+  const [labActive, setLabActive] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [selectedFood, setSelectedFood] = useState(null);
+
+  const scoredItems = useMemo(
+    () => items.filter((item) => item.score > 0),
+    [items],
+  );
+  const previewItems = useMemo(
+    () => scoredItems.slice(0, PREVIEW_SCORE_LIMIT),
+    [scoredItems],
+  );
+  const attentionCount = useMemo(
+    () => scoredItems.filter((item) => item.score >= 40).length,
+    [scoredItems],
+  );
 
   const loadInsights = useCallback(async () => {
     if (!user?.id) return;
 
-    const [{ data, meta: insightMeta }, { data: history }] = await Promise.all([
+    const [{ data, meta: insightMeta }, { data: history }, { data: activeLab }] = await Promise.all([
       getUserFoodSensitivityInsights(user.id),
-      getHealthAnalyses(user.id, 3),
+      getHealthAnalyses(user.id, 2),
+      getActiveEliminationSession(user.id),
     ]);
 
     setItems(data || []);
     setMeta(insightMeta || { days: 90, mealLogs: 0, symptomLogs: 0 });
     setAnalyses(history || []);
+    setLabActive(activeLab || null);
 
     const days = getLastNDays(28);
     const scoreResults = await Promise.all(
@@ -81,6 +104,8 @@ export default function AnalysisScreen() {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
         }
       >
+        <LabHeroCard active={labActive} />
+
         <HealthAiAnalysisSection
           userId={user?.id}
           analyses={analyses}
@@ -95,9 +120,14 @@ export default function AnalysisScreen() {
           </Card>
         </Pressable>
 
+        <SectionTitle
+          title="Besin Hassasiyetleri"
+          subtitle="Skoru oluşan besinlere hızlı bakış"
+        />
+
         <View style={styles.summaryRow}>
           <View style={styles.summaryItem}>
-            <Text style={styles.summaryValue}>{items.filter((item) => item.score >= 40).length}</Text>
+            <Text style={styles.summaryValue}>{attentionCount}</Text>
             <Text style={styles.summaryLabel}>Dikkat</Text>
           </View>
           <View style={styles.summaryDivider} />
@@ -112,10 +142,15 @@ export default function AnalysisScreen() {
           </View>
         </View>
 
-        {items.length ? (
+        {previewItems.length ? (
           <View style={styles.list}>
-            {items.map((item, index) => (
-              <FoodSensitivityCard key={item.foodKey} item={item} rank={index + 1} />
+            {previewItems.map((item, index) => (
+              <FoodSensitivityCard
+                key={item.foodKey}
+                item={item}
+                rank={index + 1}
+                onAskAi={setSelectedFood}
+              />
             ))}
           </View>
         ) : (
@@ -127,14 +162,44 @@ export default function AnalysisScreen() {
           </View>
         )}
 
+        {scoredItems.length ? (
+          <Pressable
+            onPress={() => router.push('/food-sensitivity-scores')}
+            style={({ pressed }) => [styles.secondaryBtn, pressed && styles.secondaryBtnPressed]}
+          >
+            <Ionicons name="list-outline" size={18} color={colors.textPrimary} />
+            <Text style={styles.secondaryBtnText}>
+              {scoredItems.length > PREVIEW_SCORE_LIMIT
+                ? `Tüm hassasiyet listesi (${scoredItems.length})`
+                : 'Tüm hassasiyet listesi'}
+            </Text>
+            <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
+          </Pressable>
+        ) : null}
+
         <Text style={styles.footerNote}>
-          Skor; yemek sonrası 2–12 saat içindeki belirtiler ve profildeki hassasiyet bildirimlerine göre hesaplanır.
+          Skor; yemek sonrası 2–12 saat içindeki belirtiler ve profildeki bildirimlere göre hesaplanır.
         </Text>
 
-        <Text style={styles.link} onPress={() => router.push('/sensitivities')}>
-          Bildirdiğin hassasiyetleri yönet →
-        </Text>
+        <Pressable
+          onPress={() => router.push('/sensitivities')}
+          style={({ pressed }) => [styles.manageBtn, pressed && styles.manageBtnPressed]}
+        >
+          <Ionicons name="alert-circle-outline" size={18} color={colors.white} />
+          <View style={styles.manageCopy}>
+            <Text style={styles.manageTitle}>Hassasiyetleri yönet</Text>
+            <Text style={styles.manageSubtitle}>Bildirdiğin besin listesini düzenle</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={18} color="rgba(255,255,255,0.7)" />
+        </Pressable>
       </ScrollView>
+
+      <FoodSensitivityAiSheet
+        visible={Boolean(selectedFood)}
+        foodItem={selectedFood}
+        userId={user?.id}
+        onClose={() => setSelectedFood(null)}
+      />
     </SafeAreaView>
   );
 }
@@ -161,7 +226,7 @@ const styles = StyleSheet.create({
   content: {
     padding: spacing.lg,
     gap: spacing.md,
-    paddingBottom: spacing.xxl,
+    paddingBottom: 120,
   },
   summaryRow: {
     flexDirection: 'row',
@@ -211,9 +276,49 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     lineHeight: 18,
   },
-  link: {
+  secondaryBtn: {
+    minHeight: 48,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.background,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.md,
+    gap: spacing.sm,
+  },
+  secondaryBtnPressed: {
+    backgroundColor: colors.primaryLight,
+  },
+  secondaryBtnText: {
     ...typography.bodySmall,
-    color: colors.primary,
+    color: colors.textPrimary,
     fontFamily: typography.bodySemiBold.fontFamily,
+    flex: 1,
+  },
+  manageBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.primary,
+    borderRadius: radius.lg,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+  },
+  manageBtnPressed: {
+    backgroundColor: colors.primaryDark,
+  },
+  manageCopy: {
+    flex: 1,
+    gap: 2,
+  },
+  manageTitle: {
+    ...typography.bodySemiBold,
+    color: colors.white,
+    fontSize: 15,
+  },
+  manageSubtitle: {
+    ...typography.caption,
+    color: 'rgba(255,255,255,0.72)',
   },
 });

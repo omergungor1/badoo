@@ -89,6 +89,7 @@ export function calculateFoodSensitivityScores({
         foodKey: catalogItem.food_key,
         foodName: catalogItem.food_name,
         emoji: catalogItem.emoji || '🍽',
+        keywords: catalogItem.keywords || [],
         score,
         mealCount,
         reactionCount: reactionMeals,

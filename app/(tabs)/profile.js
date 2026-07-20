@@ -167,7 +167,7 @@ export default function ProfileScreen() {
         rightIcon: appleHealthConnected ? 'checkmark-circle' : null,
         showChevron: !appleHealthConnected,
       },
-      { key: 'nutrition', icon: 'nutrition-outline', title: 'Beslenme Hedefleri', onPress: () => router.push('/edit-profile') },
+      { key: 'nutrition', icon: 'restaurant-outline', title: 'Beslenme Hedefleri', onPress: () => router.push('/edit-profile') },
       { key: 'goals', icon: 'flag-outline', title: 'Hedefler ve güncel kilo', onPress: () => router.push('/goals'), rightText: goals.length > 0 ? String(goals.length) : null },
       { key: 'reminders', icon: 'alarm-outline', title: 'Takip Hatırlatıcıları', onPress: showComingSoon },
       { key: 'stats', icon: 'stats-chart-outline', title: 'İstatistikler', onPress: () => router.push('/stats') },

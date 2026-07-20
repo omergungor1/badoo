@@ -5,20 +5,23 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { DAILY_TASK_RING_CONFIG, NUTRITION_RING_CONFIG } from '../../constants/onboarding';
 import { useAuth } from '../../context/AuthContext';
 import { calculateFoodTotals, deleteFoodLog, getFoodLogsForDay } from '../../services/foodService';
-import { captureAndShareMeal } from '../../services/mealPhotoService';
 import { getAllDailyTasksForToday, getLogsForDate, getTimelineForDay, completeTask, syncTodayWaterGlasses } from '../../services/logService';
 import { getPeriodLogsForDate } from '../../services/periodService';
 import { PERIOD_LOG_LABELS } from '../../constants/period';
 import { useAppleHealthSync } from '../../hooks/useAppleHealthSync';
 import HomeWeekCalendar from '../../components/home/HomeWeekCalendar';
-import MealNutritionModal from '../../components/meals/MealNutritionModal';
-import MealPhotoLogCard from '../../components/meals/MealPhotoLogCard';
+import AcademyHomeCard from '../../components/academy/AcademyHomeCard';
+import AcademyMascotFab from '../../components/academy/AcademyMascotFab';
+import EliminationHomeCard from '../../components/elimination/EliminationHomeCard';
+import MealDetailModal from '../../components/meals/MealDetailModal';
+import MealLogCard from '../../components/meals/MealLogCard';
 import MealStoryBar from '../../components/meals/MealStoryBar';
 import Card from '../../components/ui/Card';
 import SwipeToDeleteRow from '../../components/ui/SwipeToDeleteRow';
 import DailyActivityRings from '../../components/ui/DailyActivityRings';
 import ProgressRing from '../../components/ui/ProgressRing';
 import SectionTitle from '../../components/ui/SectionTitle';
+import Toast from '../../components/ui/Toast';
 import WaterTracking from '../../components/ui/WaterTracking';
 import { calculateDailyDigestionScore } from '../../utils/digestionScore';
 import {
@@ -40,15 +43,35 @@ import {
 } from '../../utils/activity';
 import { formatSleepLogLabel } from '../../utils/duration';
 import { formatQuantityLabel } from '../../utils/foodQuantity';
+import { isMealCardItem, isMealPhotoItem } from '../../utils/mealTimeline';
 import { formatWater } from '../../utils/nutrition';
 import { consumedGlassesFromMl, GLASS_ML, goalGlassesFromMl } from '../../utils/water';
-import { subscribeMealShared, emitMealShared } from '../../utils/mealEvents';
+import { subscribeMealShared } from '../../utils/mealEvents';
 import { consumePendingMealCapture } from '../../utils/widgetLaunch';
 import { syncNutritionWidget } from '../../services/widgetService';
+import { getAcademyHomeSummary } from '../../services/academyService';
+import { getEliminationHomeCard } from '../../services/eliminationService';
 import { colors, radius, spacing, typography } from '../../theme';
 
 function clampProgress(value) {
   return Math.max(0, Math.min(100, Math.round(value)));
+}
+
+function getDeletedFoodMacroDelta(item) {
+  if (item?.isMealGroup && item.items?.length) {
+    return calculateFoodTotals(item.items);
+  }
+  return calculateFoodTotals([item]);
+}
+
+function removeFoodItemFromTimeline(items, deletedItem) {
+  return items.filter((entry) => {
+    if (entry.logType !== 'food') return true;
+    if (deletedItem.meal_id && entry.meal_id) {
+      return entry.meal_id !== deletedItem.meal_id;
+    }
+    return entry.id !== deletedItem.id;
+  });
 }
 
 function getPeriodTimelineLabel(item) {
@@ -73,10 +96,13 @@ function getTimelineLabel(item) {
 
   switch (item.logType) {
     case 'food':
-      if (item.image_url) {
+      if (item.isMealGroup || item.image_url) {
         return `🍽 ${item.meal_title || 'Öğün'}`;
       }
-      return `🍽 ${item.foods?.food_name || 'Yemek'} (${formatQuantityLabel(item.quantity, item.foods?.unit_type)})`;
+      return `🍽 ${item.foods?.food_name || item.food_name || 'Yemek'} (${formatQuantityLabel(
+        item.quantity,
+        item.foods?.unit_type || item.unit_type,
+      )})`;
     case 'water':
       return `💧 Su +${item.amount} ml`;
     case 'drink':
@@ -144,7 +170,12 @@ export default function HomeScreen() {
   const [selectedDate, setSelectedDate] = useState(toISODate());
   const [editingMealLog, setEditingMealLog] = useState(null);
   const [mealModalVisible, setMealModalVisible] = useState(false);
-  const [mealUploading, setMealUploading] = useState(false);
+  const [toastMessage, setToastMessage] = useState(null);
+  const [academySummary, setAcademySummary] = useState(null);
+  const [academyLoading, setAcademyLoading] = useState(true);
+  const [eliminationCard, setEliminationCard] = useState(null);
+
+  const hideToast = useCallback(() => setToastMessage(null), []);
 
   const showPeriod = profile?.gender === 'kadın';
   const waterGoal = profile?.daily_water_goal || 2000;
@@ -234,12 +265,17 @@ export default function HomeScreen() {
   ]);
 
   const mealPhotoItems = useMemo(
-    () => timelineItems.filter((item) => item.logType === 'food' && item.image_url),
+    () => timelineItems.filter((item) => isMealPhotoItem(item)),
+    [timelineItems],
+  );
+
+  const mealCardItems = useMemo(
+    () => timelineItems.filter((item) => isMealCardItem(item)),
     [timelineItems],
   );
 
   const otherTimelineItems = useMemo(
-    () => timelineItems.filter((item) => !(item.logType === 'food' && item.image_url)),
+    () => timelineItems.filter((item) => !isMealCardItem(item)),
     [timelineItems],
   );
 
@@ -343,9 +379,20 @@ export default function HomeScreen() {
       setAllTasks([]);
     }
 
+    const academyPromise = getAcademyHomeSummary(user.id).then(({ data }) => {
+      setAcademySummary(data);
+      setAcademyLoading(false);
+    });
+
+    const eliminationPromise = getEliminationHomeCard(user.id).then(({ data }) => {
+      setEliminationCard(data);
+    });
+
     await Promise.all([
       loadDayMetrics(selectedDate),
       loadWeekScores(),
+      academyPromise,
+      eliminationPromise,
     ]);
   }, [user?.id, selectedDate, viewingToday, loadDayMetrics, loadWeekScores]);
 
@@ -456,23 +503,9 @@ export default function HomeScreen() {
     setMealModalVisible(true);
   }
 
-  async function handleAddMealPhoto() {
-    if (!user?.id || mealUploading || !viewingToday) return;
-
-    setMealUploading(true);
-    const { data, error } = await captureAndShareMeal(user.id);
-    setMealUploading(false);
-
-    if (error) {
-      Alert.alert('Hata', error.message || 'Öğün fotoğrafı yüklenemedi.');
-      return;
-    }
-
-    if (data) {
-      await completeTask(user.id, 'meals');
-      emitMealShared(data);
-      await loadData();
-    }
+  function handleAddMealPhoto() {
+    if (!user?.id || !viewingToday) return;
+    router.push('/add/meal-photo');
   }
 
   useFocusEffect(
@@ -505,16 +538,41 @@ export default function HomeScreen() {
         {
           text: 'Sil',
           style: 'destructive',
-          onPress: async () => {
+          onPress: () => {
             if (!user?.id) return;
 
-            const { error } = await deleteFoodLog(item.id, user.id);
-            if (error) {
-              Alert.alert('Hata', error.message);
-              return;
+            const previousTimeline = timelineItems;
+            const previousTotals = totals;
+            const macroDelta = getDeletedFoodMacroDelta(item);
+
+            setTimelineItems((prev) => removeFoodItemFromTimeline(prev, item));
+            setTotals((prev) => ({
+              calories: Math.max(0, (prev.calories || 0) - (macroDelta.calories || 0)),
+              protein: Math.max(0, (prev.protein || 0) - (macroDelta.protein || 0)),
+            }));
+
+            if (
+              editingMealLog
+              && (
+                (item.meal_id && editingMealLog.meal_id === item.meal_id)
+                || editingMealLog.id === item.id
+              )
+            ) {
+              handleMealModalClose();
             }
 
-            await loadData();
+            setToastMessage('Öğün silindi');
+
+            deleteFoodLog(item.id, user.id, item.meal_id || null).then(({ error }) => {
+              if (error) {
+                setTimelineItems(previousTimeline);
+                setTotals(previousTotals);
+                setToastMessage(error.message || 'Öğün silinemedi. Tekrar deneyin.');
+                return;
+              }
+
+              loadWeekScores();
+            });
           },
         },
       ],
@@ -545,13 +603,15 @@ export default function HomeScreen() {
 
         <DailyActivityRings rings={nutritionRings} />
 
+        {!academyLoading ? <AcademyHomeCard summary={academySummary} /> : null}
+        <EliminationHomeCard card={eliminationCard} />
+
         {viewingToday || mealPhotoItems.length ? (
           <MealStoryBar
             meals={mealPhotoItems}
             onAddMeal={handleAddMealPhoto}
             onMealPress={handleMealPress}
             showAddButton={viewingToday}
-            uploading={mealUploading}
           />
         ) : null}
 
@@ -613,14 +673,14 @@ export default function HomeScreen() {
           subtitle={viewingToday ? 'Bugünkü kayıtların' : 'Seçili günün kayıtları'}
         />
 
-        {mealPhotoItems.length ? (
+        {mealCardItems.length ? (
           <View style={styles.timelineList}>
-            {mealPhotoItems.map((item) => (
+            {mealCardItems.map((item) => (
               <SwipeToDeleteRow
                 key={`meal-${item.id}`}
                 onDelete={() => handleFoodDelete(item)}
               >
-                <MealPhotoLogCard
+                <MealLogCard
                   item={item}
                   onPress={handleMealPress}
                 />
@@ -656,7 +716,7 @@ export default function HomeScreen() {
             );
           })}
 
-          {!otherTimelineItems.length && !mealPhotoItems.length ? (
+          {!otherTimelineItems.length && !mealCardItems.length ? (
             <Card variant="light">
               <Text style={styles.timelineEmpty}>
                 {isToday(selectedDate)
@@ -668,11 +728,19 @@ export default function HomeScreen() {
         </View>
       </ScrollView>
 
-      <MealNutritionModal
+      <MealDetailModal
         visible={mealModalVisible}
         mealLog={editingMealLog}
         onClose={handleMealModalClose}
         onSaved={handleMealSaved}
+      />
+
+      <Toast message={toastMessage} onHide={hideToast} />
+
+      <AcademyMascotFab
+        hasPendingLesson={Boolean(
+          academySummary && !academySummary.todayCompleted && academySummary.todayLesson,
+        )}
       />
     </SafeAreaView>
   );

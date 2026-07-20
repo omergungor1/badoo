@@ -7,6 +7,7 @@ export const WIDGET_KEYS = {
 export const WIDGET_KINDS = {
   nutrition: 'BadooNutrition',
   quickActions: 'BadooQuickActions',
+  quickProgress: 'BadooQuickProgress',
 };
 
 export const WIDGET_DEEP_LINKS = {

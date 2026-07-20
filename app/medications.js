@@ -1,87 +1,31 @@
 import { useCallback, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { useFocusEffect, useRouter } from 'expo-router';
+import { Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useFocusEffect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
 import {
   addMedication,
   deleteMedication,
   getMedications,
-  updateMedication,
 } from '../services/profileService';
 import BackButton from '../components/ui/BackButton';
 import Button from '../components/ui/Button';
 import Card from '../components/ui/Card';
 import Input from '../components/ui/Input';
 import SectionTitle from '../components/ui/SectionTitle';
+import SwipeToDeleteRow from '../components/ui/SwipeToDeleteRow';
 import { colors, spacing, typography } from '../theme';
 
-function MedicationRow({ item, onUpdate, onDelete }) {
-  const [editing, setEditing] = useState(false);
-  const [name, setName] = useState(item.medication_name);
-  const [loading, setLoading] = useState(false);
-
-  async function handleSave() {
-    const trimmed = name.trim();
-    if (!trimmed) {
-      Alert.alert('Hata', 'İlaç adı boş olamaz.');
-      return;
-    }
-
-    if (trimmed === item.medication_name) {
-      setEditing(false);
-      return;
-    }
-
-    setLoading(true);
-    const { error } = await onUpdate(item.id, trimmed);
-    setLoading(false);
-
-    if (error) {
-      Alert.alert('Hata', error.message);
-      return;
-    }
-
-    setEditing(false);
-  }
-
-  function handleCancel() {
-    setName(item.medication_name);
-    setEditing(false);
-  }
-
-  if (editing) {
-    return (
-      <Card style={styles.rowCard}>
-        <Input value={name} onChangeText={setName} placeholder="İlaç adı" />
-        <View style={styles.rowActions}>
-          <Button title="Vazgeç" variant="outline" onPress={handleCancel} style={styles.actionBtn} />
-          <Button title="Kaydet" onPress={handleSave} loading={loading} style={styles.actionBtn} />
-        </View>
-      </Card>
-    );
-  }
-
+function MedicationRow({ item }) {
   return (
     <Card style={styles.rowCard}>
-      <View style={styles.rowHeader}>
-        <Text style={styles.rowName}>{item.medication_name}</Text>
-        <View style={styles.rowActions}>
-          <Pressable onPress={() => setEditing(true)} hitSlop={8}>
-            <Text style={styles.link}>Düzenle</Text>
-          </Pressable>
-          <Pressable onPress={() => onDelete(item)} hitSlop={8}>
-            <Text style={styles.danger}>Sil</Text>
-          </Pressable>
-        </View>
-      </View>
+      <Text style={styles.rowName}>{item.medication_name}</Text>
     </Card>
   );
 }
 
 export default function MedicationsScreen() {
   const { user } = useAuth();
-  const router = useRouter();
   const [medications, setMedications] = useState([]);
   const [newName, setNewName] = useState('');
   const [adding, setAdding] = useState(false);
@@ -131,22 +75,9 @@ export default function MedicationsScreen() {
     }
 
     setNewName('');
-    setMedications((prev) => [...prev, data].sort((a, b) => a.medication_name.localeCompare(b.medication_name, 'tr')));
-  }
-
-  async function handleUpdate(medicationId, medicationName) {
-    if (!user?.id) return { error: { message: 'Oturum bulunamadı.' } };
-
-    const { data, error } = await updateMedication(user.id, medicationId, medicationName);
-    if (!error && data) {
-      setMedications((prev) =>
-        prev
-          .map((med) => (med.id === medicationId ? data : med))
-          .sort((a, b) => a.medication_name.localeCompare(b.medication_name, 'tr')),
-      );
-    }
-
-    return { error };
+    setMedications((prev) =>
+      [...prev, data].sort((a, b) => a.medication_name.localeCompare(b.medication_name, 'tr')),
+    );
   }
 
   function confirmDelete(item) {
@@ -199,14 +130,13 @@ export default function MedicationsScreen() {
         />
 
         {medications.length ? (
-          medications.map((item) => (
-            <MedicationRow
-              key={item.id}
-              item={item}
-              onUpdate={handleUpdate}
-              onDelete={confirmDelete}
-            />
-          ))
+          <View style={styles.list}>
+            {medications.map((item) => (
+              <SwipeToDeleteRow key={item.id} onDelete={() => confirmDelete(item)}>
+                <MedicationRow item={item} />
+              </SwipeToDeleteRow>
+            ))}
+          </View>
         ) : (
           <Card>
             <Text style={styles.empty}>Kayıtlı ilaç yok. Yukarıdan yeni ilaç ekleyebilirsiniz.</Text>
@@ -230,17 +160,10 @@ const styles = StyleSheet.create({
   headerTitle: { ...typography.headingMedium, color: colors.textPrimary, flex: 1 },
   content: { padding: spacing.lg, gap: spacing.md, paddingBottom: spacing.xxl },
   addBtn: { marginTop: spacing.sm },
-  rowCard: { gap: spacing.sm },
-  rowHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: spacing.md,
+  list: { gap: spacing.sm },
+  rowCard: {
+    paddingVertical: spacing.md,
   },
-  rowName: { ...typography.body, color: colors.textPrimary, flex: 1 },
-  rowActions: { flexDirection: 'row', gap: spacing.md, alignItems: 'center' },
-  actionBtn: { flex: 1 },
-  link: { ...typography.bodySmall, color: colors.primary, fontWeight: '600' },
-  danger: { ...typography.bodySmall, color: colors.danger, fontWeight: '600' },
+  rowName: { ...typography.body, color: colors.textPrimary },
   empty: { ...typography.body, color: colors.textSecondary },
 });

@@ -1,5 +1,6 @@
 import { FOOD_UNIT_NUTRITION_HINTS } from '../constants/foodUnits';
 import { getOpenAiApiKey } from '../lib/openai';
+import { normalizeUnitType } from '../utils/foodQuantity';
 
 function toInt(value) {
   const num = Number(value);
@@ -36,7 +37,9 @@ export async function lookupFoodNutrition(foodName, unitType = 'gram') {
     };
   }
 
-  const basis = FOOD_UNIT_NUTRITION_HINTS[unitType] || FOOD_UNIT_NUTRITION_HINTS.gram;
+  const normalizedUnitType = normalizeUnitType(unitType);
+  const basis =
+    FOOD_UNIT_NUTRITION_HINTS[normalizedUnitType] || FOOD_UNIT_NUTRITION_HINTS.gram;
 
   try {
     const response = await fetch('https://api.openai.com/v1/chat/completions', {

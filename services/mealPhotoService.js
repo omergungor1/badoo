@@ -1,5 +1,4 @@
 import * as ImageManipulator from 'expo-image-manipulator';
-import * as ImagePicker from 'expo-image-picker';
 import { supabase } from '../lib/supabase';
 import { logSupabaseError } from '../lib/networkLog';
 import { MEAL_PHOTO_BUCKET } from '../constants/meals';
@@ -8,30 +7,6 @@ import { addMealPhotoLog } from './foodService';
 async function uriToArrayBuffer(uri) {
   const response = await fetch(uri);
   return response.arrayBuffer();
-}
-
-export async function pickMealPhoto() {
-  const permission = await ImagePicker.requestCameraPermissionsAsync();
-  if (!permission.granted) {
-    return { uri: null, error: { message: 'Kamera erişim izni gerekli.' } };
-  }
-
-  const result = await ImagePicker.launchCameraAsync({
-    mediaTypes: ['images'],
-    allowsEditing: false,
-    quality: 1,
-  });
-
-  if (result.canceled) {
-    return { uri: null, error: null };
-  }
-
-  const asset = result.assets?.[0];
-  if (!asset?.uri) {
-    return { uri: null, error: { message: 'Fotoğraf alınamadı.' } };
-  }
-
-  return { uri: asset.uri, error: null };
 }
 
 export async function uploadMealPhoto(userId, sourceUri) {
@@ -71,18 +46,6 @@ export async function uploadMealPhoto(userId, sourceUri) {
   }
 
   return { data, error };
-}
-
-export async function captureAndShareMeal(userId) {
-  const { uri, error: pickError } = await pickMealPhoto();
-  if (pickError) {
-    return { data: null, error: pickError };
-  }
-  if (!uri) {
-    return { data: null, error: null };
-  }
-
-  return uploadMealPhoto(userId, uri);
 }
 
 export async function deleteMealPhoto(imagePath) {

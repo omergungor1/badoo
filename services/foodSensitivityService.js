@@ -53,11 +53,8 @@ export async function getUserFoodSensitivityInsights(userId) {
     declaredSensitivities: declared || [],
   });
 
-  const withSignal = scores.filter((item) => item.score > 0 || item.mealCount > 0);
-  const results = withSignal.length ? withSignal : scores.slice(0, 8);
-
   return {
-    data: results,
+    data: scores,
     meta: {
       days: ANALYSIS_DAYS,
       mealLogs: foodLogs?.length || 0,

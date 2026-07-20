@@ -172,6 +172,7 @@ export const NUTRITION_RING_CONFIG = {
 export const WATER_AMOUNTS = [200, 300, 500, 1000];
 
 export const QUICK_ADD_ITEMS = [
+  { key: 'voice', label: 'Sesli Kayıt', icon: 'mic', route: '/add/voice-note' },
   { key: 'food', label: 'Yiyecek Listesi', icon: 'search', route: '/add/food' },
   { key: 'water', label: 'Su Ekle', icon: 'water', route: '/add/water' },
   { key: 'medication', label: 'İlaç Ekle', icon: 'medkit', route: '/add/medication' },

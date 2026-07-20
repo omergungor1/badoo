@@ -38,6 +38,9 @@ module.exports = () => ({
         process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ||
         process.env.EXPO_PUBLIC_SUPABASE_KEY,
       openAiApiKey: process.env.OPENAI_API_KEY || process.env.EXPO_PUBLIC_OPENAI_API_KEY,
+      badooApiUrl: process.env.EXPO_PUBLIC_BADOO_API_URL || 'https://badoo-api.vercel.app',
+      badooApiLocalUrl:
+        process.env.EXPO_PUBLIC_BADOO_API_LOCAL_URL || 'http://192.168.1.103:3000',
     },
   },
 });

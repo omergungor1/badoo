@@ -49,7 +49,13 @@ export default function AddWaterScreen() {
       <Text style={styles.subtitle}>1 bardak = {GLASS_ML} ml</Text>
 
       <Card>
-        <WaterGlassPicker glasses={glasses} onChange={setGlasses} min={1} max={5} />
+        <WaterGlassPicker
+          title="Su miktarı"
+          glasses={glasses}
+          onChange={setGlasses}
+          min={1}
+          max={5}
+        />
       </Card>
 
       <Button title={`${glasses} Bardak Ekle`} onPress={handleAdd} loading={loading} style={styles.saveBtn} />

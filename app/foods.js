@@ -25,10 +25,12 @@ import Chip from '../components/ui/Chip';
 import Input from '../components/ui/Input';
 import SectionTitle from '../components/ui/SectionTitle';
 import Toast from '../components/ui/Toast';
+import { normalizeUnitType } from '../utils/foodQuantity';
 import { colors, radius, spacing, typography } from '../theme';
 
 function formatFoodMeta(food) {
-  const basis = FOOD_UNIT_NUTRITION_HINTS[food.unit_type] || FOOD_UNIT_NUTRITION_HINTS.gram;
+  const unitType = normalizeUnitType(food.unit_type);
+  const basis = FOOD_UNIT_NUTRITION_HINTS[unitType] || FOOD_UNIT_NUTRITION_HINTS.gram;
 
   if (food.calories == null) {
     return basis;
@@ -89,7 +91,7 @@ export default function FoodsScreen() {
   function openEditModal(food) {
     setEditingFood(food);
     setEditName(food.food_name || '');
-    setEditUnitType(food.unit_type || FOOD_UNIT_TYPES.GRAM);
+    setEditUnitType(normalizeUnitType(food.unit_type));
     setEditCalories(food.calories != null ? String(food.calories) : '');
     setEditProtein(food.protein != null ? String(food.protein) : '');
     setEditCarbs(food.carbohydrates != null ? String(food.carbohydrates) : '');

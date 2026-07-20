@@ -40,7 +40,11 @@ export default function HealthAnalysisDetailScreen() {
     <SafeAreaView style={styles.safe} edges={['top']}>
       <View style={styles.header}>
         <BackButton />
-        <Text style={styles.headerTitle}>AI Sağlık Analizi</Text>
+        <Text style={styles.headerTitle}>
+          {analysis?.analysis_type === 'food_sensitivity'
+            ? 'Besin Hassasiyet Analizi'
+            : 'AI Sağlık Analizi'}
+        </Text>
       </View>
 
       <ScrollView

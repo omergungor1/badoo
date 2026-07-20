@@ -24,10 +24,10 @@ function mapFoodLogs(logs) {
   return compactList(logs).map((log) => ({
     date: log.timestamp?.split('T')[0],
     time: log.timestamp,
-    food: log.foods?.food_name || 'Bilinmeyen',
-    quantity: formatQuantityLabel(log.quantity, log.foods?.unit_type),
-    calories: log.foods?.calories,
-    protein: log.foods?.protein,
+    food: log.foods?.food_name || log.food_name || log.meal_title || 'Bilinmeyen',
+    quantity: formatQuantityLabel(log.quantity, log.foods?.unit_type || log.unit_type),
+    calories: log.calories ?? log.foods?.calories,
+    protein: log.protein ?? log.foods?.protein,
   }));
 }
 
@@ -206,4 +206,25 @@ ${JSON.stringify(payload)}`;
   }
 
   return prompt;
+}
+
+export function buildFoodSensitivityPrompt(payload) {
+  const food = payload.targetFood || {};
+
+  return `Kullanıcı "${food.foodName || 'bu besin'}" için hassasiyet skorunu anlamak istiyor.
+
+Görevin:
+1. Bu skorun neden oluşmuş olabileceğini sade dilde açıkla (öğün–belirti ilişkisi, bildirilen hassasiyet boost'u varsa belirt)
+2. Gerçek bir hassasiyet olup olmadığını ayırt etmeye yardımcı olacak pratik ipuçları ver
+3. Kullanıcının kendi başına deneyebileceği 3–5 gözlem / eliminasyon fikri öner
+4. Ne zaman doktora danışması gerektiğini belirt
+5. Teşhis koyma; bilgilendirici ve sakin bir ton kullan
+
+Skor seviyesi: ${food.levelLabel || 'bilinmiyor'} (${food.score ?? 0}/100)
+Öğün sayısı: ${food.mealCount ?? 0}
+Reaksiyonlu öğün: ${food.reactionCount ?? 0}
+Profilde bildirildi: ${food.declaredMatch ? 'evet' : 'hayır'}
+
+JSON veri:
+${JSON.stringify(payload)}`;
 }

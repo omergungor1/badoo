@@ -1,7 +1,7 @@
 import { getDb } from '../lib/db';
 import { lookupFoodNutrition } from './nutritionAiService';
 
-import { getNutritionFactor } from '../utils/foodQuantity';
+import { getNutritionFactor, normalizeUnitType } from '../utils/foodQuantity';
 
 export async function searchFoods(query = '') {
   let request = getDb().from('foods').select('*').order('food_name');
@@ -43,6 +43,7 @@ export async function findFoodByName(foodName) {
 
 export async function createFood(foodName, unitType = 'gram') {
   const trimmed = foodName.trim();
+  const normalizedUnitType = normalizeUnitType(unitType);
   if (!trimmed) {
     return { data: null, error: { message: 'Yemek veya içecek adı girin.' } };
   }
@@ -56,7 +57,10 @@ export async function createFood(foodName, unitType = 'gram') {
     return { data: null, error: { message: 'Bu yemek veya içecek zaten listede.' } };
   }
 
-  const { data: nutrition, error: nutritionError } = await lookupFoodNutrition(trimmed, unitType);
+  const { data: nutrition, error: nutritionError } = await lookupFoodNutrition(
+    trimmed,
+    normalizedUnitType,
+  );
   if (nutritionError) {
     return { data: null, error: nutritionError };
   }
@@ -65,7 +69,7 @@ export async function createFood(foodName, unitType = 'gram') {
     .from('foods')
     .insert({
       food_name: trimmed,
-      unit_type: unitType,
+      unit_type: normalizedUnitType,
       calories: nutrition.calories,
       protein: nutrition.protein,
       carbohydrates: nutrition.carbohydrates,
@@ -79,6 +83,7 @@ export async function createFood(foodName, unitType = 'gram') {
 
 export async function updateFood(foodId, { foodName, unitType, calories, protein, carbohydrates, fats }) {
   const trimmed = foodName.trim();
+  const normalizedUnitType = normalizeUnitType(unitType);
   if (!trimmed) {
     return { data: null, error: { message: 'Yemek veya içecek adı girin.' } };
   }
@@ -96,7 +101,7 @@ export async function updateFood(foodId, { foodName, unitType, calories, protein
     .from('foods')
     .update({
       food_name: trimmed,
-      unit_type: unitType,
+      unit_type: normalizedUnitType,
       calories,
       protein,
       carbohydrates,
@@ -109,13 +114,15 @@ export async function updateFood(foodId, { foodName, unitType, calories, protein
   return { data, error };
 }
 
-export async function addFoodLog({ userId, foodId, quantity, timestamp }) {
+export async function addFoodLog({ userId, foodId, quantity, unitType, timestamp }) {
   const { data, error } = await getDb()
     .from('food_logs')
     .insert({
       user_id: userId,
       food_id: foodId,
       quantity,
+      unit_type: normalizeUnitType(unitType),
+      is_manual: true,
       timestamp: timestamp || new Date().toISOString(),
     })
     .select('*, foods(food_name, unit_type, calories, protein, carbohydrates, fats)')
@@ -153,11 +160,33 @@ export async function updateMealLogNutrition(logId, {
   protein,
   carbohydrates,
   fats,
+  mealId = null,
 }) {
+  const title = mealTitle?.trim() || 'Öğün';
+
+  if (mealId) {
+    const { data, error } = await getDb()
+      .from('meals')
+      .update({
+        meal_title: title,
+        total_calories: calories ?? 0,
+        total_protein: protein ?? 0,
+        total_carbohydrates: carbohydrates ?? 0,
+        total_fats: fats ?? 0,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', mealId)
+      .is('deleted_at', null)
+      .select('*')
+      .single();
+
+    return { data, error };
+  }
+
   const { data, error } = await getDb()
     .from('food_logs')
     .update({
-      meal_title: mealTitle?.trim() || 'Öğün',
+      meal_title: title,
       calories: calories ?? null,
       protein: protein ?? null,
       carbohydrates: carbohydrates ?? null,
@@ -171,10 +200,34 @@ export async function updateMealLogNutrition(logId, {
   return { data, error };
 }
 
-export async function deleteFoodLog(logId, userId) {
+export async function deleteFoodLog(logId, userId, mealId = null) {
+  const deletedAt = new Date().toISOString();
+
+  if (mealId) {
+    const { error: logsError } = await getDb()
+      .from('food_logs')
+      .update({ deleted_at: deletedAt })
+      .eq('meal_id', mealId)
+      .eq('user_id', userId)
+      .is('deleted_at', null);
+
+    if (logsError) {
+      return { error: logsError };
+    }
+
+    const { error: mealError } = await getDb()
+      .from('meals')
+      .update({ deleted_at: deletedAt })
+      .eq('id', mealId)
+      .eq('user_id', userId)
+      .is('deleted_at', null);
+
+    return { error: mealError };
+  }
+
   const { error } = await getDb()
     .from('food_logs')
-    .update({ deleted_at: new Date().toISOString() })
+    .update({ deleted_at: deletedAt })
     .eq('id', logId)
     .eq('user_id', userId)
     .is('deleted_at', null);
@@ -188,10 +241,12 @@ export async function addFoodLogsBatch({ userId, items, timestamp }) {
   }
 
   const ts = timestamp || new Date().toISOString();
-  const rows = items.map(({ foodId, quantity }) => ({
+  const rows = items.map(({ foodId, quantity, unitType }) => ({
     user_id: userId,
     food_id: foodId,
     quantity,
+    unit_type: normalizeUnitType(unitType),
+    is_manual: true,
     timestamp: ts,
   }));
 
@@ -206,7 +261,9 @@ export async function addFoodLogsBatch({ userId, items, timestamp }) {
 export async function getFoodLogsForDay(userId, start, end) {
   const { data, error } = await getDb()
     .from('food_logs')
-    .select('*, foods(food_name, unit_type, calories, protein, carbohydrates, fats)')
+    .select(
+      '*, foods(food_name, unit_type, calories, protein, carbohydrates, fats), meals:meal_id(id, meal_title, source, image_url, image_path, total_calories, total_protein, total_carbohydrates, total_fats, eaten_at, deleted_at)',
+    )
     .eq('user_id', userId)
     .is('deleted_at', null)
     .gte('timestamp', start)
@@ -219,7 +276,7 @@ export async function getFoodLogsForDay(userId, start, end) {
 export function calculateFoodTotals(logs = []) {
   return logs.reduce(
     (acc, log) => {
-      if (log.image_url) {
+      if (log.calories != null) {
         acc.calories += log.calories || 0;
         acc.protein += log.protein || 0;
         acc.carbs += log.carbohydrates || 0;
@@ -228,7 +285,7 @@ export function calculateFoodTotals(logs = []) {
       }
 
       const food = log.foods || {};
-      const factor = getNutritionFactor(log.quantity, food.unit_type);
+      const factor = getNutritionFactor(log.quantity, food.unit_type || log.unit_type);
       acc.calories += Math.round((food.calories || 0) * factor);
       acc.protein += Math.round((food.protein || 0) * factor);
       acc.carbs += Math.round((food.carbohydrates || 0) * factor);

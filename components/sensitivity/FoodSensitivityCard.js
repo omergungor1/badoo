@@ -1,19 +1,31 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View, Pressable } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { getSensitivityLevel } from '../../utils/foodSensitivityScore';
 import { colors, radius, spacing, typography } from '../../theme';
 
-export default function FoodSensitivityCard({ item, rank }) {
+export default function FoodSensitivityCard({ item, rank, onAskAi }) {
   const level = getSensitivityLevel(item.score);
+  const showAskAi = Boolean(onAskAi && item.score > 0);
 
   return (
     <View style={styles.card}>
-      <View style={styles.left}>
+      <View style={styles.topRow}>
         <View style={styles.emojiWrap}>
           <Text style={styles.emoji}>{item.emoji}</Text>
         </View>
-        <View style={styles.copy}>
-          <Text style={styles.name}>{item.foodName}</Text>
-          <Text style={styles.meta}>
+
+        <View style={styles.main}>
+          <Text style={styles.name} numberOfLines={1}>
+            {item.foodName}
+          </Text>
+          <View style={styles.metaRow}>
+            <View style={[styles.scoreBadge, { backgroundColor: `${level.color}22` }]}>
+              <Text style={[styles.score, { color: level.color }]}>{item.score}</Text>
+            </View>
+            <Text style={styles.metaDot}>·</Text>
+            <Text style={[styles.level, { color: level.color }]}>{level.label}</Text>
+          </View>
+          <Text style={styles.meta} numberOfLines={1}>
             {item.mealCount
               ? `${item.mealCount} öğün · ${item.reactionCount} reaksiyon`
               : item.declaredMatch
@@ -21,14 +33,19 @@ export default function FoodSensitivityCard({ item, rank }) {
                 : 'Henüz yeterli veri yok'}
           </Text>
         </View>
-      </View>
 
-      <View style={styles.right}>
-        <Text style={styles.rank}>#{rank}</Text>
-        <View style={[styles.scoreBadge, { backgroundColor: `${level.color}22` }]}>
-          <Text style={[styles.score, { color: level.color }]}>{item.score}</Text>
+        <View style={styles.right}>
+          <Text style={styles.rank}>#{rank}</Text>
+          {showAskAi ? (
+            <Pressable
+              onPress={() => onAskAi(item)}
+              style={({ pressed }) => [styles.askBtn, pressed && styles.askBtnPressed]}
+            >
+              <Ionicons name="sparkles" size={12} color={colors.white} />
+              <Text style={styles.askBtnText}>AI sor</Text>
+            </Pressable>
+          ) : null}
         </View>
-        <Text style={[styles.level, { color: level.color }]}>{level.label}</Text>
       </View>
 
       <View style={styles.track}>
@@ -43,14 +60,13 @@ const styles = StyleSheet.create({
     backgroundColor: colors.white,
     borderRadius: radius.lg,
     padding: spacing.md,
-    paddingRight: 88,
     gap: spacing.sm,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.border,
   },
-  left: {
+  topRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     gap: spacing.md,
   },
   emojiWrap: {
@@ -64,31 +80,44 @@ const styles = StyleSheet.create({
   emoji: {
     fontSize: 24,
   },
-  copy: {
+  main: {
     flex: 1,
-    gap: 2,
+    gap: 4,
+    minWidth: 0,
   },
   name: {
     ...typography.bodySemiBold,
     color: colors.textPrimary,
+  },
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    flexWrap: 'nowrap',
+  },
+  rank: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    fontFamily: typography.bodySemiBold.fontFamily,
+  },
+  level: {
+    ...typography.caption,
+    fontFamily: typography.bodySemiBold.fontFamily,
+  },
+  metaDot: {
+    ...typography.caption,
+    color: colors.textMuted,
   },
   meta: {
     ...typography.caption,
     color: colors.textSecondary,
   },
   right: {
-    position: 'absolute',
-    top: spacing.md,
-    right: spacing.md,
     alignItems: 'flex-end',
-    gap: 2,
-  },
-  rank: {
-    ...typography.caption,
-    color: colors.textSecondary,
+    gap: 6,
   },
   scoreBadge: {
-    minWidth: 42,
+    minWidth: 40,
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: radius.full,
@@ -96,21 +125,34 @@ const styles = StyleSheet.create({
   },
   score: {
     ...typography.bodySemiBold,
-    fontSize: 16,
-  },
-  level: {
-    ...typography.caption,
-    fontFamily: typography.bodySemiBold.fontFamily,
+    fontSize: 15,
   },
   track: {
     height: 4,
     borderRadius: radius.full,
     backgroundColor: colors.background,
     overflow: 'hidden',
-    marginTop: spacing.xs,
   },
   fill: {
     height: '100%',
     borderRadius: radius.full,
+  },
+  askBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: colors.primary,
+    borderRadius: radius.full,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+  },
+  askBtnPressed: {
+    backgroundColor: colors.primaryDark,
+  },
+  askBtnText: {
+    ...typography.caption,
+    color: colors.white,
+    fontFamily: typography.bodySemiBold.fontFamily,
+    fontSize: 11,
   },
 });

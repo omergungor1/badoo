@@ -2,6 +2,7 @@ import { getDb } from '../lib/db';
 import { DAILY_TASKS } from '../constants/onboarding';
 import { GLASS_ML } from '../utils/water';
 import { endOfDay, parseISODate, startOfDay, toISODate } from '../utils/date';
+import { groupFoodLogsForTimeline } from '../utils/mealTimeline';
 
 export async function addWaterLog({ userId, amount, timestamp }) {
   return getDb()
@@ -306,7 +307,13 @@ export async function completeTask(userId, taskKey) {
 
 export async function getTimelineForDay(userId, start, end) {
   const tables = [
-    { table: 'food_logs', type: 'food', timeField: 'timestamp', select: '*, foods(food_name, unit_type, calories, protein, carbohydrates, fats)' },
+    {
+      table: 'food_logs',
+      type: 'food',
+      timeField: 'timestamp',
+      select:
+        '*, foods(food_name, unit_type, calories, protein, carbohydrates, fats), meals:meal_id(id, meal_title, source, image_url, image_path, total_calories, total_protein, total_carbohydrates, total_fats, eaten_at, deleted_at)',
+    },
     { table: 'water_logs', type: 'water', timeField: 'timestamp' },
     { table: 'drink_logs', type: 'drink', timeField: 'timestamp' },
     { table: 'medication_logs', type: 'medication', timeField: 'timestamp', select: '*, medications(medication_name)' },
@@ -341,7 +348,14 @@ export async function getTimelineForDay(userId, start, end) {
     }),
   );
 
-  return results.flat().sort((a, b) => new Date(b.sortTime) - new Date(a.sortTime));
+  const flat = results.flat();
+  const foodLogs = flat.filter((item) => item.logType === 'food');
+  const otherLogs = flat.filter((item) => item.logType !== 'food');
+
+  return [
+    ...groupFoodLogsForTimeline(foodLogs),
+    ...otherLogs,
+  ].sort((a, b) => new Date(b.sortTime) - new Date(a.sortTime));
 }
 
 export async function getLogsForDate(userId, date) {
